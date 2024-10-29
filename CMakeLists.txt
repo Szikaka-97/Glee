@@ -23,9 +23,15 @@ FetchContent_Declare(pugixml
   GIT_TAG         v1.14
 )
 
+FetchContent_Declare(libdeflate
+  GIT_REPOSITORY  https://github.com/ebiggers/libdeflate.git
+  GIT_TAG         v1.22
+)
+
 FetchContent_MakeAvailable(
   spdlog
-  pugixml)
+  pugixml
+  libdeflate)
 
 add_library(EldenRingGlee SHARED
   src/dllmain.cpp
@@ -36,7 +42,3 @@ set_target_properties(EldenRingGlee PROPERTIES OUTPUT_NAME "GleeRecolorer")
 target_link_libraries(EldenRingGlee spdlog)
 
 add_definitions(-DPROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
-
-add_custom_command(TARGET EldenRingGlee POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:EldenRingGlee> "C:/Users/Szikaka/Desktop/Modowanie/Elden Ring/ModEngine-2.1.0.0-win64/mod/Glee/GleeRecolorer.dll"
-)
