@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28.1)
+cmake_minimum_required(VERSION 3.22.1)
 
 set(CMAKE_GENERATOR_PLATFORM x64)
 
@@ -8,6 +8,11 @@ project(EldenRingGlee
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+# The common prefix path when downloading zlib from GnuWin
+# https://gnuwin32.sourceforge.net/packages/zlib.htm
+# If you get it from a different source, or build or linux you'll have to change that
+set(CMAKE_PREFIX_PATH "C:/Program Files (x86)/GnuWin32")
 
 include(FetchContent)
 
@@ -23,22 +28,22 @@ FetchContent_Declare(pugixml
   GIT_TAG         v1.14
 )
 
-FetchContent_Declare(libdeflate
-  GIT_REPOSITORY  https://github.com/ebiggers/libdeflate.git
-  GIT_TAG         v1.22
-)
-
 FetchContent_MakeAvailable(
   spdlog
   pugixml
-  libdeflate)
+)
 
 add_library(EldenRingGlee SHARED
   src/dllmain.cpp
+  src/binary.cpp
+  src/bnd_file.cpp
+  src/dcx_file.cpp
+  src/matbin_file.cpp
 )
 
 set_target_properties(EldenRingGlee PROPERTIES OUTPUT_NAME "GleeRecolorer")
 
-target_link_libraries(EldenRingGlee spdlog)
+find_package(ZLIB REQUIRED)
+target_link_libraries(EldenRingGlee spdlog pugixml ZLIB::ZLIB)
 
 add_definitions(-DPROJECT_VERSION="${CMAKE_PROJECT_VERSION}")
