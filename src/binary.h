@@ -4,49 +4,126 @@
 #include <string>
 #include <iostream>
 #include <cstring>
+#include <format>
+#include <stdint.h>
 
 typedef unsigned char byte;
 
-template <size_t Size>
-const std::array<byte, Size> Extract(const byte* buffer, int& counter) {
-	std::array<byte, Size> result = {0};
+class BufferView {
+private:
+	const byte* start;
+	const byte* end;
+	byte* current;
 
-	memcpy(result.data(), buffer + counter, Size);
+	bool bigEndian;
+public:
+	BufferView(const byte* start, const byte* end, bool bigEndian = true):
+	start(start),
+	end(end),
+	current(const_cast<byte *>(start)),
+	bigEndian(bigEndian) {}
 
-	counter += Size;
+	BufferView(const byte* start, size_t length, bool bigEndian = true):
+	start(start),
+	end(start + length),
+	current(const_cast<byte *>(start)),
+	bigEndian(bigEndian) {}
 
-	return result;
-}
+	template <size_t Size>
+	const std::array<byte, Size> Read() {
+		if (current + Size > end) {
+			throw std::out_of_range(
+				std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, Size)
+			);
+		}
 
-template <size_t Length>
-const std::string ExtractASCII(const byte* buffer, int& counter) {
-	const std::array<byte, Length> strContainer = Extract<Length>(buffer, counter);
+		std::array<byte, Size> result = {0};
 
-	std::string result;
+		memcpy(result.data(), current, Size);
 
-	if (strContainer[Length - 1] == '\0') {
-		result = std::string((char *) strContainer.data());
+		current += Size;
+
+		return result;
 	}
-	else {
-		byte temp[Length + 1] = {0};
 
-		memcpy(temp, strContainer.data(), Length);
+	const std::string ReadASCII(int length);
 
-		result = std::string((char *) temp);
+	byte ReadByte();
+
+	bool ReadBoolean();
+
+	int ReadInt32();
+
+	uint64_t ReadInt64();
+
+	float ReadFloat();
+
+	const std::string ReadUTF16();
+
+	const std::string ReadOffsetUTF16();
+
+	const std::string ReadOffsetUTF16(int offset);
+
+	template<size_t Length>
+	const std::array<bool, Length> ReadBoolArray() {
+		std::array<bool, Length> result = {false};
+
+		for (int i = 0; i < Length; i++) {
+			result[i] = this->ReadByte() != 0;
+		}
+
+		return result;
 	}
 
-	return result;
-}
+	template<size_t Length>
+	const std::array<int, Length> ReadIntArray() {
+		std::array<int, Length> result = {0};
 
-int ExtractInt32(const byte* buffer, int& counter, bool bigEndian = true);
+		for (int i = 0; i < Length; i++) {
+			result[i] = this->ReadInt32();
+		}
 
-bool AssertInt(int got, int expected);
+		return result;
+	}
 
-bool AssertInt(int got, int expected, const std::string& message);
+	template<size_t Length>
+	const std::array<float, Length> ReadFloatArray() {
+		std::array<float, Length> result = {0};
 
-bool AssertASCII(const std::string& got, const std::string& expected);
+		for (int i = 0; i < Length; i++) {
+			result[i] = this->ReadFloat();
+		}
 
-bool AssertASCII(const std::string& got, const std::string& expected, const std::string& message);
+		return result;
+	}
+
+	void AssertByte(byte expected, const std::string& message);
+
+	void AssertInt32(int expected, const std::string& message);
+
+	void AssertInt64(uint64_t expected, const std::string& message);
+
+	void AssertASCII(const std::string& expected, const std::string& message);
+
+	void AssertASCII(const std::string& expected, int explicitLength, const std::string& message);
+
+	void Advance(int movement);
+
+	byte* GetPos();
+	size_t GetOffset();
+
+	template<typename T, size_t Count = 1>
+	void Skip() {
+		Advance(sizeof(T) * Count);
+	}
+
+	void SetPos(byte* pos);
+	void SetOffset(size_t offset);
+
+	bool IsBigEndian();
+	void SetBigEndian(bool setBigEndian);
+};
+
 
 template <size_t Size>
 std::ostream& operator<< (std::ostream& o, const std::array<byte, Size>& a) {

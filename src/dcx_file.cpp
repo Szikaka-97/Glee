@@ -34,8 +34,8 @@ DCXFile* DCXFile::ReadFile(const fs::path& filePath) {
 	}
 
 	byte header[dcx_header_size] = {0};
-
 	file.read((char *) header, dcx_header_size);
+
 
 	if (!file.good()) {
 		spdlog::error("Unable to read header : " + filePath.string());
@@ -43,82 +43,46 @@ DCXFile* DCXFile::ReadFile(const fs::path& filePath) {
 		RETURN_ERR;
 	}
 
-	int counter = 0;
+	BufferView headerView(header, dcx_header_size);
 
-	if (!AssertASCII(ExtractASCII<4>(header, counter), "DCX", "Magic Value")) {
-		RETURN_ERR;
+	try {
+		headerView.AssertASCII("DCX", 4, "Magic Value");
+		headerView.AssertInt32(0x11000, "");
+		headerView.AssertInt32(0x18, "");
+		headerView.AssertInt32(0x24, "");
+		headerView.AssertInt32(0x44, "");
+		headerView.AssertInt32(0x4C, "");
+		headerView.AssertASCII("DCS", 4, "DCS magic");
+
+		int uncompressedSize = headerView.ReadInt32();
+		int compressedSize = headerView.ReadInt32();
+
+		headerView.AssertASCII("DCP", 4, "DCP magic");
+		headerView.AssertASCII("DFLT", "DFLT magic");
+		headerView.AssertInt32(0x20, "");
+		headerView.AssertInt32(0x9000000, "");
+		headerView.AssertInt32(0, "");
+		headerView.AssertInt32(0, "");
+		headerView.AssertInt32(0, "");
+		headerView.AssertInt32(0x00010100, "");
+		headerView.AssertASCII("DCA", "DCA magic");
+
+		int compressedHeaderLength = headerView.ReadInt32();
+
+		byte* fileData = new byte[compressedSize];
+
+		file.read((char *) fileData, compressedSize);
+
+		file.close();
+
+		return new DCXFile(compressedSize, uncompressedSize, compressedHeaderLength, fileData);
+	} catch (std::runtime_error e) {
+		spdlog::error(e.what());
+
+		file.close();
+
+		return nullptr;
 	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x11000, "Type specific unknown at 0x04")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x18, "Unknown at 0x08")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x24, "Unknown at 0x0C")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x44, "Type specific unknown at 0x10")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x4C, "Type specific unknown at 0x14")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertASCII(ExtractASCII<4>(header, counter), "DCS", "DCS magic")) {
-		RETURN_ERR;
-	}
-
-	int uncompressedSize = ExtractInt32(header, counter);
-	int compressedSize = ExtractInt32(header, counter);
-
-	if (!AssertASCII(ExtractASCII<4>(header, counter), "DCP", "DCP magic")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertASCII(ExtractASCII<4>(header, counter), "DFLT", "DFLT magic")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x20, "Unknown at 0x2C")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x9000000, "Type specific unknown at 0x30")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0, "Type specific unknown at 0x34")) {
-		RETURN_ERR;
-	}
-	if (!AssertInt(ExtractInt32(header, counter), 0, "Type specific unknown at 0x38")) {
-		RETURN_ERR;
-	}
-	if (!AssertInt(ExtractInt32(header, counter), 0, "Type specific unknown at 0x3C")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertInt(ExtractInt32(header, counter), 0x00010100, "Unknown at 0x40")) {
-		RETURN_ERR;
-	}
-
-	if (!AssertASCII(ExtractASCII<4>(header, counter), "DCA", "DCA magic")) {
-		RETURN_ERR;
-	}
-
-	int compressedHeaderLength = ExtractInt32(header, counter);
-
-	byte* fileData = new byte[compressedSize];
-
-	file.read((char *) fileData, compressedSize);
-
-	file.close();
-
-	return new DCXFile(compressedSize, uncompressedSize, compressedHeaderLength, fileData);
 }
 
 DCXFile* DCXFile::Pack(byte* fileData, size_t dataLength, size_t compressedHeaderLength) {

@@ -2,87 +2,193 @@
 
 #include <vector>
 #include <fstream>
+#include <chrono>
+
+namespace stdtime = std::chrono;
 
 #include "binary.h"
+
+struct BNDFileHeaderInfo {
+	int dataOffset;
+	int size;
+	std::string name;
+};
 
 BNDFile::BNDFile(const byte* backingData):
 	backingData(backingData) {}
 
-std::string FindName(const byte* start, const byte* end) {
-	const int extensionLength = 14;
+BNDFile::~BNDFile() {
+	for (auto& segment : this->matbinFileOffsets) {
+		if (segment.second.loaded) {
+			delete segment.second.matbin;
+		}
+	}
+}
 
-	std::array<byte, extensionLength> wideExtension = {
-		'.', 0, 'm', 0, 'a', 0, 't', 0, 'x', 0, 'm', 0, 'l', 0
-	};
+// Always does
+bool HasCompression(byte format) {
+	return format & 0b00100000;
+}
 
-	byte* nameEndPos = const_cast<byte *>(end - extensionLength);
+// Always does
+bool HasLongOffsets(byte format) {
+	return format & 0b00010000;
+}
 
-	for (nameEndPos; nameEndPos > start && memcmp(nameEndPos, wideExtension.data(), extensionLength) != 0; nameEndPos--);
+// Never does
+bool HasIDs(byte format) {
+	return format & 0b00000010;
+}
 
-	byte* nameStartPos = nameEndPos;
+// Always does
+bool HasNames(byte format) {
+	return format & 0b00001100;
+}
 
-	for (nameStartPos; nameEndPos > start && *nameStartPos != '\\'; nameStartPos--);
+byte DecodeFlags(byte readFormat, bool reverseBits) {
+	if (reverseBits || readFormat & 1 && !(readFormat & 0b10000000)) {
+		byte result = 0;
 
-	nameStartPos += 2;
+		for (int i = 0; i < 8; i++) {
+			result |= 128 * (readFormat & 1) >> i;
 
-	std::string result;
-	// result.reserve((nameEndPos - nameStartPos) / 2);
+			readFormat >>= 1;
+		}
 
-	for (int i = 0; i < (nameEndPos - nameStartPos); i += 2) {
-		if (nameStartPos[i]) {
-			result.push_back(nameStartPos[i]);
+		return result;
+	}
+	else {
+		return readFormat;
+	}
+}
+
+BNDFileHeaderInfo ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits) {
+	byte flags = DecodeFlags(dataView.ReadBoolean(), reverseBits);
+	dataView.AssertByte(0, "Padding");
+	dataView.AssertByte(0, "Padding");
+	dataView.AssertByte(0, "Padding");
+	dataView.AssertInt32(-1, "Padding");
+
+	int fileSize = dataView.ReadInt64();
+
+	int uncompressedSize = fileSize;
+	if (HasCompression(format)) {
+		uncompressedSize = dataView.ReadInt64();
+	}
+
+	int dataOffset = 0;
+	if (HasLongOffsets(format)) {
+		dataOffset = dataView.ReadInt64();
+	}
+	else {
+		dataOffset = dataView.ReadInt32();
+	}
+
+	int id = -1;
+	if (HasIDs(format)) {
+		id = dataView.ReadInt32();
+	}
+
+	int nameOffset = 0;
+
+	std::string name;
+	if (HasNames(format)) {
+		nameOffset = dataView.ReadInt32();
+
+		// Technically, the names can be either UTF16 or Shift JIS, but in the material file they are always UTF16
+
+		name = dataView.ReadOffsetUTF16(nameOffset);
+
+		if (name.ends_with(".matbin")) {
+			int nameStart = name.find_last_of("\\") + 1;
+
+			// 7 for the length of ".matbin"
+			name = name.substr(nameStart, name.length() - nameStart - 7);
 		}
 	}
 
-	return result;
+	return {dataOffset, fileSize, name};
 }
 
 BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
-	int pos = 0;
+	try {
+		BufferView dataView(data, dataLength, false);
 
-	if (!AssertASCII(ExtractASCII<4>(data, pos), "BND4", "Magic value")) {
-		return nullptr;
-	}
+		dataView.AssertASCII("BND4", "Magic Value");
 
-	pos = 0xC;
+		bool unk04 = dataView.ReadBoolean();
+		bool unk05 = dataView.ReadBoolean();
+		dataView.AssertByte(0, "Padding 1");
+		dataView.AssertByte(0, "Padding 2");
+		dataView.AssertByte(0, "Padding 3");
+		bool bigEndian = dataView.ReadBoolean();
+		bool reverseBits = !dataView.ReadBoolean();
+		dataView.AssertByte(0, "Padding 4");
 
-	int fileCount = ExtractInt32(data, pos, false);
+		dataView.SetBigEndian(bigEndian);
 
-	pos = 0x28;
+		int fileCount = dataView.ReadInt32();
+		dataView.AssertInt64(0x40, "Header size");
+		std::array<byte, 8> version = dataView.Read<8>();
 
-	pos = ExtractInt32(data, pos, false) + 8;
+		int fileHeaderSize = dataView.ReadInt64();
 
-	BNDFile* resultFile = new BNDFile(data);
+		dataView.Skip<uint64_t>();
 
-	const byte** offsets = new const byte*[fileCount];
-	int count = 0;
+		bool unicode = dataView.ReadBoolean();
+		byte format = DecodeFlags(dataView.ReadByte(), reverseBits);
 
-	while (pos < dataLength) {
-		if (AssertASCII(ExtractASCII<4>(data, pos), "MAB\0")) {
-			offsets[count] = data + pos;
+		byte extended = dataView.ReadByte();
 
-			count++;
+		dataView.AssertByte(0, "Padding 5");
+		dataView.AssertInt32(0, "Padding 6");
+
+		if (extended == 4) { // We actually always take this branch
+			dataView.Advance(8);
+
+			// SoulsFormats does some shit here, we don't actually need it
 		}
-	}
+		else {
+			dataView.AssertInt64(0, "Hash table size");
+		}
 
-	if (count != fileCount) {
+		BNDFile* result = new BNDFile(data);
+		result->unk04 = unk04;
+		result->unk05 = unk05;
+		result->bigEndian = bigEndian;
+		result->bitBigEndian = reverseBits;
+		result->version = version;
+		result->unicode = unicode;
+		result->format = format;
+		result->extended = extended;
+
+		for (int i = 0; i < fileCount; i++) {
+			auto fileHeader = ReadBNDFileHeader(dataView, format, reverseBits);
+
+			result->matbinFileOffsets[fileHeader.name] = MatbinSegment(const_cast<byte *>(data + fileHeader.dataOffset), fileHeader.size);
+		}
+
+		return result;
+	} catch (const std::runtime_error& e) {
+		spdlog::error(std::format("Runtime: {}", e.what()));
+
 		return nullptr;
 	}
-
-	for (int i = 0; i < count - 1; i++) {
-		auto matName = FindName(offsets[i], offsets[i + 1]);
-
-		resultFile->matbinFileOffsets[matName] = {offsets[i], offsets[i + 1]};
-	}
-	resultFile->matbinFileOffsets[FindName(offsets[count - 1], data + dataLength)] = MatbinFile(offsets[count - 1], data + dataLength);
-
-	return resultFile;
 }
 
-MatbinFile BNDFile::GetMatbin(std::string name) {
+MatbinFile* BNDFile::GetMatbin(std::string name) {
 	if (this->matbinFileOffsets.contains(name)) {
-		return this->matbinFileOffsets[name];
+		auto segmentInfo = this->matbinFileOffsets[name];
+
+		if (!segmentInfo.loaded) {
+			auto offsetInfo = segmentInfo.dataLocation;
+
+			segmentInfo.matbin = new MatbinFile(offsetInfo.start, offsetInfo.length);
+			segmentInfo.loaded = true;
+		}
+
+		return segmentInfo.matbin;
 	}
 
-	return {nullptr, nullptr};
+	return nullptr;
 }

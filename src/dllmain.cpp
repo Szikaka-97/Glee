@@ -69,19 +69,19 @@ void TestChange() {
 		return;
 	}
 
-	std::array<float, 5> gotValues = fabricMat.GetProperty<5>("C_DetailBlend__Rich__snp_0_color_0");
+	std::array<float, 5> gotValues = fabricMat->GetPropertyValues<float, 5>("C_DetailBlend__Rich__snp_0_color_0");
 
 	gotValues[0] = 1;
 	gotValues[1] = 0;
 	gotValues[2] = 0;
 
-	fabricMat.SetProperty("C_DetailBlend__Rich__snp_0_color_0", gotValues);
+	fabricMat->SetPropertyValues<float, 5>("C_DetailBlend__Rich__snp_0_color_0", gotValues);
 
 	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
 
-	const auto newDCXFile = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
+	const auto newDCXFilePath = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
 
-	newDcx->WriteFile(newDCXFile);
+	newDcx->WriteFile(newDCXFilePath);
 
 	spdlog::info("Finished modding");
 

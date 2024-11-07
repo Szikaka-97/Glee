@@ -1,9 +1,35 @@
 #include "binary.h"
 
+#include <format>
+
 #include "spdlog/spdlog.h"
 
-int ExtractInt32(const byte* buffer, int& counter, bool bigEndian) {
-	const std::array<byte, 4> intContainer = Extract<4>(buffer, counter);
+const std::string BufferView::ReadASCII(int length) {
+	if (current + length > end) {
+		throw std::out_of_range(
+			std::format("Buffer overflow at ReadASCII offset= {} length= {}", this->current - this->start, length)
+		);
+	}
+
+	std::string result((char*) current, length);
+
+	current += length;
+
+	return result;
+}
+
+byte BufferView::ReadByte() {
+	const std::array<byte, sizeof(byte)> byteContainer = Read<sizeof(byte)>();
+
+	return byteContainer[0];
+}
+
+bool BufferView::ReadBoolean() {
+	return ReadByte() == 1;
+}
+
+int BufferView::ReadInt32() {
+	const std::array<byte, sizeof(int)> intContainer = Read<sizeof(int)>();
 
 	int result = 0;
 
@@ -13,41 +39,177 @@ int ExtractInt32(const byte* buffer, int& counter, bool bigEndian) {
 	unsigned int b3 = intContainer[3];
 
 	if (bigEndian) {
-		result += (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+		result = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
 	}
 	else {
-		result += (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+		result = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
 	}
 
 	return result;
 }
 
-bool AssertInt(int got, int expected) {
-	return got == expected;
-}
+uint64_t BufferView::ReadInt64() {
+	const std::array<byte, sizeof(uint64_t)> intContainer = Read<sizeof(uint64_t)>();
 
-bool AssertInt(int got, int expected, const std::string& message) {
-	bool result = AssertInt(got, expected);
+	uint64_t result = 0;
 
-	if (!result) {
-		spdlog::error("Assertion failed - " + message + "; " + std::to_string(got) + " != " + std::to_string(expected));
+	uint64_t b0 = intContainer[0];
+	uint64_t b1 = intContainer[1];
+	uint64_t b2 = intContainer[2];
+	uint64_t b3 = intContainer[3];
+	uint64_t b4 = intContainer[4];
+	uint64_t b5 = intContainer[5];
+	uint64_t b6 = intContainer[6];
+	uint64_t b7 = intContainer[7];
+
+	if (bigEndian) {
+		result = (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32) | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7;
+	}
+	else {
+		result = (b7 << 56) | (b6 << 48) | (b5 << 40) | (b4 << 32) | (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
 	}
 
 	return result;
 }
 
-bool AssertASCII(const std::string& got, const std::string& expected) {
-	return got.compare(expected) == 0;
+float BufferView::ReadFloat() {
+	unsigned int container = ReadInt32();
+
+	float* floatAddr = reinterpret_cast<float *>(&container);
+
+	return *floatAddr;
 }
 
-bool AssertASCII(const std::string& got, const std::string& expected, const std::string& message) {
-	bool result = AssertASCII(got, expected);
+const std::string BufferView::ReadUTF16() {
+	std::string result;
+	char newChar;
 
-	if (!result) {
-		spdlog::error("Assertion failed - " + message + "; " + got + " != " + expected);
-	}
+	do {
+		if (this->current >= this->end) {
+			throw std::out_of_range(
+				std::format("Buffer overflow at ReadUTF16 offset= {} final string length= {}", this->current - this->start, result.size())
+			);
+		}
+
+		newChar = *this->current;
+
+		this->current += 2;
+
+		result += newChar;
+	} while (newChar != '\0');
+
+	result.pop_back();
 
 	return result;
+}
+
+const std::string BufferView::ReadOffsetUTF16() {
+	uint64_t offset = this->ReadInt64();
+	auto currentOffset = this->GetOffset();
+
+	this->SetOffset(offset);
+	std::string result = this->ReadUTF16();
+	this->SetOffset(currentOffset);
+
+	return result;
+}
+
+const std::string BufferView::ReadOffsetUTF16(int offset) {
+	auto currentOffset = this->GetOffset();
+
+	this->SetOffset(offset);
+	std::string result = this->ReadUTF16();
+	this->SetOffset(currentOffset);
+
+	return result;
+}
+
+void BufferView::AssertByte(byte expected, const std::string& message) {
+	if (ReadByte() != expected) {
+		throw std::runtime_error(message);
+	}
+}
+
+void BufferView::AssertInt32(int expected, const std::string& message) {
+	if (ReadInt32() != expected) {
+		throw std::runtime_error(message);
+	}
+}
+
+void BufferView::AssertInt64(uint64_t expected, const std::string& message) {
+	if (ReadInt64() != expected) {
+		throw std::runtime_error(message);
+	}
+}
+
+
+void BufferView::AssertASCII(const std::string& expected, const std::string& message) {
+	if (ReadASCII(expected.length()) != expected) {
+		throw std::runtime_error(message);
+	}
+}
+
+void BufferView::AssertASCII(const std::string& expected, int explicitLength, const std::string& message) {
+	auto s = ReadASCII(explicitLength);
+
+	if (expected.length() < explicitLength) {
+		std::string extendedExpected = expected;
+
+		do {
+			extendedExpected.push_back('\0');
+		} while (extendedExpected.length() < explicitLength);
+
+		if (s != extendedExpected) {
+			throw std::runtime_error(std::format("{} expected: {}; got: {}", message, expected, s));
+		}
+	}
+	else {
+		if (s != expected) {
+			throw std::runtime_error(std::format("{} expected: {}; got: {}", message, expected, s));
+		}
+	}
+}
+
+void BufferView::SetPos(byte* pos) {
+	if (pos >= this->start && pos < this->end) {
+		this->current = pos;
+	}
+	else {
+		throw std::out_of_range(
+			std::format("Position was out of range: {:x}", (intptr_t) pos)
+		);
+	}
+}
+
+void BufferView::Advance(int movement) {
+	SetOffset(this->GetOffset() + movement);
+}
+
+void BufferView::SetOffset(size_t offset) {
+	if (this->start + offset < this->end) {
+		this->current = const_cast<byte *>(this->start + offset);
+	}
+	else {
+		throw std::out_of_range(
+			std::format("Offset was out of range: {}", offset)
+		);
+	}
+}
+
+byte* BufferView::GetPos() {
+	return this->current;
+}
+
+size_t BufferView::GetOffset() {
+	return this->current - this->start;
+}
+
+bool BufferView::IsBigEndian() {
+	return this->bigEndian;
+}
+
+void BufferView::SetBigEndian(bool setBigEndian) {
+	this->bigEndian = setBigEndian;
 }
 
 std::array<byte, 4> ToBytes(int i, bool bigEndian) {
