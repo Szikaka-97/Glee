@@ -6,6 +6,8 @@
 #include "binary.h"
 #include "matbin_file.h"
 
+#include "material_mod.h"
+
 class BNDFile {
 private:
 	struct MatbinSegment {
@@ -47,4 +49,6 @@ public:
 	static BNDFile* Parse(const byte* data, size_t dataLength);
 
 	MatbinFile* GetMatbin(std::string name);
+
+	void ApplyMod(const MaterialMod& mod);
 };

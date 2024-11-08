@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<material-mod
+  xmlns="Glee"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="Glee ./materialMod.xsd"
+>
+  <configuration-file href="./myconf.ini">
+    <default-value key="jacketColor"> Blue </default-value> 
+  </configuration-file>
+
+  <material-change target="P[BD_M_1710]_Fabric">
+    <property-change target="C_DetailBlend__Rich__snp_0_color_0">
+      <if>
+        <equals>
+          <configuration key="jacketColor"/>
+          <value> Blue </value>
+        </equals>
+      </if>
+
+      <r> 1</r>
+      <g> 0 </g>
+      <b> 1 </b>
+    </property-change>
+  </material-change>
+</material-mod>

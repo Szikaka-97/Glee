@@ -7,6 +7,7 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/basic_file_sink.h"
+#include "pugixml.hpp"
 
 #include "dcx_file.h"
 #include "matbin_file.h"
@@ -69,13 +70,19 @@ void TestChange() {
 		return;
 	}
 
-	std::array<float, 5> gotValues = fabricMat->GetPropertyValues<float, 5>("C_DetailBlend__Rich__snp_0_color_0");
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file((pluginPath / "xml" / "examplemod.xml").c_str());
+	if (!result) {
+		std::cout << "Failed to load the XML\n";
 
-	gotValues[0] = 1;
-	gotValues[1] = 0;
-	gotValues[2] = 0;
+		return;
+	}
 
-	fabricMat->SetPropertyValues<float, 5>("C_DetailBlend__Rich__snp_0_color_0", gotValues);
+	MaterialMod mod;
+
+	mod.AddMod(doc);
+
+	bnd->ApplyMod(mod);
 
 	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
 
@@ -90,6 +97,78 @@ void TestChange() {
 	delete file;
 }
 
+void LoadXMLs() {
+	const auto sourceDCXpath = pluginPath / "assets" / "allmaterial.matbinbnd.dcx";
+
+	spdlog::info("Starting XML modding");
+
+	auto file = DCXFile::ReadFile(sourceDCXpath);
+
+	if (!file) {
+		spdlog::error("Couldn't read the source material file");
+
+		return;
+	}
+
+	size_t actualDecompressedSize = 0;
+	byte* outFileBuffer = file->Decompress(actualDecompressedSize);
+
+	auto bnd = BNDFile::Parse(outFileBuffer, actualDecompressedSize);
+
+	if (!bnd) {
+		spdlog::error("Not good - BND");
+
+		return;
+	}
+
+	MaterialMod mod;
+
+	auto xmlSourceDir = pluginPath / "recolors";
+
+	if (fs::exists(xmlSourceDir) && fs::is_directory(xmlSourceDir)) {
+		for (const auto& file : fs::directory_iterator(xmlSourceDir)) {
+			const auto& filePath = file.path();
+
+			if (filePath.extension() == ".xml") {
+				pugi::xml_document modDoc;
+
+				pugi::xml_parse_result result = modDoc.load_file(filePath.c_str());
+				if (!result) {
+					spdlog::error(std::format("Failed to load the XML at path {}", filePath.string()));
+
+					continue;
+				}
+				else {
+					spdlog::info(std::format("Loaded the XML at path {}", filePath.string()));
+				}
+
+				mod.AddMod(modDoc);
+			}
+		}
+	}
+	else {
+		if (!fs::exists(xmlSourceDir)) {
+			spdlog::error("Directory {} doesn't exist!", xmlSourceDir.string());
+		}
+		else {
+			spdlog::error("{} isn't a directory!", xmlSourceDir.string());
+		}
+	}
+
+	bnd->ApplyMod(mod);
+
+	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
+
+	const auto newDCXFilePath = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
+
+	newDcx->WriteFile(newDCXFilePath);
+
+	delete bnd;
+	delete file;
+
+	spdlog::info("Finished modding");
+}
+
 void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	wchar_t dll_filename[MAX_PATH] = {0};
 	GetModuleFileNameW(hinstDLL, dll_filename, MAX_PATH);
@@ -101,7 +180,7 @@ void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
 	spdlog::info("Initializing Glee");
 
-	TestChange();
+	LoadXMLs();
 }
 
 void Dispose() {

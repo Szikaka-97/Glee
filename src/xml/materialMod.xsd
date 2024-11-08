@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<xs:schema 
+	xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	targetNamespace="Glee"
+	xmlns="Glee"
+	elementFormDefault="qualified"
+>
+	<xs:group name="vector-props">
+		<xs:choice>
+			<xs:sequence>
+				<xs:choice minOccurs="0">
+					<xs:element name="r" type="xs:float" />
+					<xs:element name="x" type="xs:float" />
+				</xs:choice>
+				<xs:choice minOccurs="0">
+					<xs:element name="g" type="xs:float" />
+					<xs:element name="y" type="xs:float" />
+				</xs:choice>
+				<xs:choice minOccurs="0">
+					<xs:element name="b" type="xs:float" />
+					<xs:element name="z" type="xs:float" />
+				</xs:choice>
+				<xs:choice minOccurs="0">
+					<xs:element name="a" type="xs:float" />
+					<xs:element name="w" type="xs:float" />
+				</xs:choice>
+				<xs:element name="q" type="xs:float" minOccurs="0"/>
+			</xs:sequence>
+			<xs:choice>
+				<xs:element name="value" type="xs:float" />
+				<xs:element name="value" type="xs:boolean" />
+			</xs:choice>
+		</xs:choice>
+	</xs:group>
+
+<!-- IF STATEMENT -->
+
+	<xs:group name="conditional-value">
+		<xs:choice>
+			<xs:element name="configuration">
+				<xs:complexType>
+					<xs:attribute name="key" type="xs:string" use="required" />
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="value" type="xs:string" />
+		</xs:choice>
+	</xs:group>
+
+	<xs:group name="conditional-statement">
+		<xs:sequence>
+			<xs:group ref="conditional-value" minOccurs="2" maxOccurs="2"/>
+		</xs:sequence>
+	</xs:group>
+
+	<xs:group name="conditional-operation">
+		<xs:sequence>
+			<xs:choice minOccurs="2" maxOccurs="unbounded">
+				<xs:element name="equals">
+					<xs:complexType>
+						<xs:group ref="conditional-statement" />
+					</xs:complexType>
+				</xs:element>
+				<xs:element name="not-equals">
+					<xs:complexType>
+						<xs:group ref="conditional-statement" />
+					</xs:complexType>
+				</xs:element>
+			</xs:choice>
+		</xs:sequence>
+	</xs:group>
+
+	<xs:group name="conditional">
+		<xs:choice>
+			<xs:element name="equals">
+				<xs:complexType>
+					<xs:group ref="conditional-statement" />
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="not-equals">
+				<xs:complexType>
+					<xs:group ref="conditional-statement" />
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="or">
+				<xs:complexType>
+					<xs:group ref="conditional-operation" />
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="and">
+				<xs:complexType>
+					<xs:group ref="conditional-operation" />
+				</xs:complexType>
+			</xs:element>
+		</xs:choice>
+	</xs:group>
+
+<!-- END OF IF STATEMENT -->
+
+	<xs:element name="material-mod">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="configuration-file" minOccurs="0">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="default-value">
+								<xs:complexType>
+									<xs:simpleContent>
+										<xs:extension base="xs:string">
+											<xs:attribute name="key" type="xs:string" use="required"/>
+										</xs:extension>
+									</xs:simpleContent>
+								</xs:complexType>
+							</xs:element>	
+						</xs:sequence>
+						<xs:attribute name="href" type="xs:anyURI" use="required" />
+					</xs:complexType>
+				</xs:element>
+
+				<xs:element name="material-change" maxOccurs="unbounded">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="property-change" maxOccurs="unbounded">
+								<xs:complexType>
+									<xs:sequence>
+										<xs:element name="if" minOccurs="0" maxOccurs="1">
+											<xs:complexType>
+												<xs:group ref="conditional" />
+											</xs:complexType>
+										</xs:element>
+
+										<xs:group ref="vector-props" />
+									</xs:sequence>
+
+									<xs:attribute name="target" type="xs:string" use="required" />
+								</xs:complexType>
+							</xs:element>
+						</xs:sequence>
+
+						<xs:attribute name="target" type="xs:string" use="required" />
+					</xs:complexType>
+				</xs:element>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+</xs:schema>

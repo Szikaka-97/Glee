@@ -6,6 +6,7 @@
 #include <concepts>
 
 #include "binary.h"
+#include "material_change.h"
 
 #include "spdlog/spdlog.h"
 
@@ -80,6 +81,16 @@ public:
 
 	template<typename T, size_t Length>
 	requires ParamValue<T, Length>
+	bool HasProperty(const std::string& propertyName) {
+		Param<T, Length>* param = nullptr;
+
+		GetParam(param, propertyName);
+
+		return param != nullptr;
+	}
+
+	template<typename T, size_t Length>
+	requires ParamValue<T, Length>
 	std::array<T, Length> GetPropertyValues(const std::string& propertyName) {
 		Param<T, Length>* param = nullptr;
 
@@ -109,6 +120,8 @@ public:
 
 		memcpy(const_cast<T *>(param->value), values.data(), sizeof(T) * Length);
 	}
+
+	void ApplyMod(const MaterialChange& change);
 
 	byte* GetStart() { return const_cast<byte *>(this->start); }
 	byte* GetEnd() { return const_cast<byte *>(this->end); }

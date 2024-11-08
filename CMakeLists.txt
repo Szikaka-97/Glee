@@ -40,7 +40,11 @@ add_library(EldenRingGlee SHARED
   src/bnd_file.cpp
   src/dcx_file.cpp
   src/matbin_file.cpp
+  src/mat/material_mod.cpp
+  src/mat/material_change.cpp
 )
+
+include_directories(src/mat)
 
 set_target_properties(EldenRingGlee PROPERTIES OUTPUT_NAME "GleeRecolorer")
 

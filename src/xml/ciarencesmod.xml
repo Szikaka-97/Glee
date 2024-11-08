@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<material-mod xmlns:xsi="http://qqq.q3.org/2001/XMLSchema-instance" xsi:schemaLocation="Glee ./materialMod.xsd" xmlns="Glee">
+    <material-change target="P[BD_M_1250]_Fabric_Outer_Cloth">
+        <property-change target="C_DetailBlend__snp_0_color_0">
+            <r>0.999351</r>
+            <g>0.5</g>
+            <b>0.999351</b>
+            <a>1</a>
+            <q>3.5</q>
+        </property-change>
+        <property-change target="C_DetailBlend__snp_0_color_1">
+            <r>1</r>
+            <g>0.5</g>
+            <b>1</b>
+            <a>1</a>
+            <q>1</q>
+        </property-change>
+    </material-change>
+    <material-change target="P[BD_M_1250]_Fabric_Inner_Cloth">
+        <property-change target="C_DetailBlend__snp_0_color_0">
+            <r>0.999351</r>
+            <g>0.5</g>
+            <b>0.999351</b>
+            <a>1</a>
+            <q>3</q>
+        </property-change>
+    </material-change>
+    <material-change target="P[BD_M_1250]_Fabric_Inner">
+        <property-change target="C_DetailBlend__snp_0_color_0">
+            <r>0.999351</r>
+            <g>0.5</g>
+            <b>0.999351</b>
+            <a>1</a>
+            <q>3</q>
+        </property-change>
+    </material-change>
+    <material-change target="P[BD_M_1250]_Fabric_Outer">
+        <property-change target="C_DetailBlend__snp_0_color_0">
+            <r>0.999351</r>
+            <g>0.5</g>
+            <b>0.999351</b>
+            <a>1</a>
+            <q>3.5</q>
+        </property-change>
+    </material-change>
+</material-mod>

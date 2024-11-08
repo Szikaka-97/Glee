@@ -151,6 +151,56 @@ end(start + length) {
 	}
 }
 
+template<typename T, size_t Length>
+requires ParamValue<T, Length>
+bool ApplyPropertyChange(MatbinFile* mat, const PropertyChange& propChange) {
+	if (mat->HasProperty<T, Length>(propChange.target)) {
+		spdlog::info(std::format(" Changed property {}", propChange.target));
+
+		std::array<T, Length> values = mat->GetPropertyValues<T, Length>(propChange.target);
+
+		for (int i = 0; i < Length; i++) {
+			if (propChange.values[i].enabled) {
+				values[i] = (T) propChange.values[i].value;
+			}
+		}
+
+		mat->SetPropertyValues(propChange.target, values);
+
+		return true;
+	}
+
+	return false;
+}
+
+void MatbinFile::ApplyMod(const MaterialChange& change) {
+	for (const auto& propChange : change.GetChanges()) {
+		bool result = (
+			ApplyPropertyChange<bool, 1>(this, propChange)
+			||
+			ApplyPropertyChange<int, 1>(this, propChange)
+			||
+			ApplyPropertyChange<int, 2>(this, propChange)
+			||
+			ApplyPropertyChange<float, 1>(this, propChange)
+			||
+			ApplyPropertyChange<float, 2>(this, propChange)
+			||
+			ApplyPropertyChange<float, 3>(this, propChange)
+			||
+			ApplyPropertyChange<float, 4>(this, propChange)
+			||
+			ApplyPropertyChange<float, 5>(this, propChange)
+		);
+
+		if (!result) {
+			// ERROR - possible typo or shader mismatch
+
+			spdlog::error("No change");
+		}
+	}
+}
+
 inline bool MatbinFile::IsValid() {
 	return this->start != nullptr && this->end != nullptr;
 }

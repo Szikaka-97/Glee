@@ -178,7 +178,7 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 
 MatbinFile* BNDFile::GetMatbin(std::string name) {
 	if (this->matbinFileOffsets.contains(name)) {
-		auto segmentInfo = this->matbinFileOffsets[name];
+		auto& segmentInfo = this->matbinFileOffsets[name];
 
 		if (!segmentInfo.loaded) {
 			auto offsetInfo = segmentInfo.dataLocation;
@@ -191,4 +191,16 @@ MatbinFile* BNDFile::GetMatbin(std::string name) {
 	}
 
 	return nullptr;
+}
+
+void BNDFile::ApplyMod(const MaterialMod& mod) {
+	const auto changes = mod.GetChanges();
+
+	for (const auto& change : changes) {
+		if (this->matbinFileOffsets.contains(change.first)) {
+			spdlog::info(std::format("Modding material {}", change.first));
+
+			this->GetMatbin(change.first)->ApplyMod(*change.second);
+		}
+	}
 }
