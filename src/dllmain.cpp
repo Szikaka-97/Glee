@@ -129,6 +129,7 @@ void LoadXMLs() {
 	auto destMatFile = bnd->Pack();
 
 	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
+	fs::create_directories(newDCXFilePath);
 
 	destMatFile->WriteFile(newDCXFilePath);
 
