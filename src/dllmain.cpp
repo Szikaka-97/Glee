@@ -1,4 +1,17 @@
-#include <windows.h>
+#ifdef _WIN32
+	#include <windows.h>
+
+	#define DLL_RETURN bool WINAPI
+#else
+	#include <unistd.h>
+
+	#define HINSTANCE int
+	#define DWORD int
+	#define LPVOID int
+	#define DLL_RETURN bool
+	#define DLL_PROCESS_ATTACH 0
+	#define DLL_PROCESS_DETACH 1
+#endif
 
 #include <fstream>
 #include <filesystem>
@@ -15,9 +28,26 @@
 
 namespace fs = std::filesystem;
 
-fs::path pluginPath;
+fs::path GetLibraryDir(HINSTANCE instanceID) {
+	fs::path result;
+
+#ifdef _WIN32
+    wchar_t path[MAX_PATH] = { 0 };
+    GetModuleFileNameW(instanceID, path, MAX_PATH);
+    result =  path;
+#else
+    char path[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", path, PATH_MAX);
+    result = std::string(path, (count > 0) ? count : 0);
+#endif
+
+	return result.parent_path();
+}
+
+fs::path pluginDir;
 
 void InitLogger(fs::path path) {
+#ifdef _WIN32
 	const auto t = std::time(0);
 	const auto now = std::localtime(&t);
 
@@ -36,10 +66,11 @@ void InitLogger(fs::path path) {
 	spdlog::flush_on(spdlog::level::info);
 
 	spdlog::set_default_logger(mainLog);
+#endif
 }
 
 void TestChange() {
-	const auto sourceDCXpath = pluginPath / "assets" / "allmaterial.matbinbnd.dcx";
+	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
 
 	spdlog::info("Starting modding");
 
@@ -70,8 +101,8 @@ void TestChange() {
 		return;
 	}
 
-	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file((pluginPath / "xml" / "examplemod.xml").c_str());
+	pugi::xml_document doc; 
+	pugi::xml_parse_result result = doc.load_file((pluginDir / "xml" / "examplemod.xml").c_str());
 	if (!result) {
 		std::cout << "Failed to load the XML\n";
 
@@ -86,7 +117,7 @@ void TestChange() {
 
 	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
 
-	const auto newDCXFilePath = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
+	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
 
 	newDcx->WriteFile(newDCXFilePath);
 
@@ -98,7 +129,7 @@ void TestChange() {
 }
 
 void LoadXMLs() {
-	const auto sourceDCXpath = pluginPath / "assets" / "allmaterial.matbinbnd.dcx";
+	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
 
 	spdlog::info("Starting XML modding");
 
@@ -123,7 +154,7 @@ void LoadXMLs() {
 
 	MaterialMod mod;
 
-	auto xmlSourceDir = pluginPath / "recolors";
+	auto xmlSourceDir = pluginDir / "recolors";
 
 	if (fs::exists(xmlSourceDir) && fs::is_directory(xmlSourceDir)) {
 		for (const auto& file : fs::directory_iterator(xmlSourceDir)) {
@@ -159,7 +190,7 @@ void LoadXMLs() {
 
 	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
 
-	const auto newDCXFilePath = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
+	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
 
 	newDcx->WriteFile(newDCXFilePath);
 
@@ -170,13 +201,9 @@ void LoadXMLs() {
 }
 
 void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-	wchar_t dll_filename[MAX_PATH] = {0};
-	GetModuleFileNameW(hinstDLL, dll_filename, MAX_PATH);
-	auto folder = fs::path(dll_filename).parent_path();
+	pluginDir = GetLibraryDir(hinstDLL);
 
-	pluginPath = folder;
-
-	InitLogger(folder);
+	InitLogger(pluginDir);
 
 	spdlog::info("Initializing Glee");
 
@@ -186,7 +213,7 @@ void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 void Dispose() {
 	spdlog::info("Exiting Glee");
 
-	const auto createdDCXpath = pluginPath / "material" / "allmaterial.matbinbnd.dcx";
+	const auto createdDCXpath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
 
 	if (fs::exists(createdDCXpath)) {
 		if (fs::remove(createdDCXpath)) {
@@ -198,7 +225,7 @@ void Dispose() {
 	}
 }
 
-bool WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+DLL_RETURN DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	switch(fdwReason) { 
 		case DLL_PROCESS_ATTACH:
 			Start(hinstDLL, fdwReason, lpvReserved);
@@ -212,3 +239,13 @@ bool WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	}
 	return true;
 }
+
+#ifndef _WIN32
+	int main() {
+		if (DllMain(0, DLL_PROCESS_ATTACH, 0)) {
+			return 0;
+		}
+		
+		return 1;
+	}
+#endif

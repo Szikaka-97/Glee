@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-set(CMAKE_GENERATOR_PLATFORM x64)
+if (WIN32)
+  set(CMAKE_GENERATOR_PLATFORM x64)
+endif (WIN32)
 
 project(EldenRingGlee
   VERSION   "0.1.0"
@@ -10,14 +12,12 @@ project(EldenRingGlee
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-# The common prefix path when downloading zlib from GnuWin
-# https://gnuwin32.sourceforge.net/packages/zlib.htm
-# If you get it from a different source, or build or linux you'll have to change that
-set(CMAKE_PREFIX_PATH "C:/Program Files (x86)/GnuWin32")
-
 include(FetchContent)
 
-set(SPDLOG_DISABLE_DEFAULT_LOGGER ON)
+if (WIN32)
+  set(SPDLOG_DISABLE_DEFAULT_LOGGER ON)
+endif (WIN32)
+
 set(SPDLOG_USE_STD_FORMAT ON)
 FetchContent_Declare(spdlog
   GIT_REPOSITORY  https://github.com/gabime/spdlog.git
@@ -34,15 +34,29 @@ FetchContent_MakeAvailable(
   pugixml
 )
 
-add_library(EldenRingGlee SHARED
-  src/dllmain.cpp
-  src/binary.cpp
-  src/bnd_file.cpp
-  src/dcx_file.cpp
-  src/matbin_file.cpp
-  src/mat/material_mod.cpp
-  src/mat/material_change.cpp
-)
+if (WIN32)
+  add_library(EldenRingGlee SHARED
+    src/dllmain.cpp
+    src/binary.cpp
+    src/bnd_file.cpp
+    src/dcx_file.cpp
+    src/matbin_file.cpp
+    src/mat/material_mod.cpp
+    src/mat/material_change.cpp
+  )
+else(WIN32)
+  add_executable(EldenRingGlee
+    src/dllmain.cpp
+    src/binary.cpp
+    src/bnd_file.cpp
+    src/dcx_file.cpp
+    src/matbin_file.cpp
+    src/mat/material_mod.cpp
+    src/mat/material_change.cpp
+  )
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+endif(WIN32)
 
 include_directories(src/mat)
 
