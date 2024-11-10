@@ -60,15 +60,7 @@
 							</xs:complexType>
 						</xs:element>
 
-						<xs:element name="path">
-							<xs:complexType>
-								<xs:simpleContent>
-										<xs:extension base="xs:string">
-											<xs:attribute name="target" type="xs:string" use="required" />
-										</xs:extension>
-									</xs:simpleContent>
-							</xs:complexType>
-						</xs:element>
+						<xs:element name="path" type="xs:string" />
 					</xs:sequence>
 
 					<xs:attribute name="target" type="xs:string" use="required" />
