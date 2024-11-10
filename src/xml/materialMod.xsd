@@ -25,12 +25,55 @@
 					<xs:element name="a" type="xs:float" />
 					<xs:element name="w" type="xs:float" />
 				</xs:choice>
-				<xs:element name="q" type="xs:float" minOccurs="0"/>
+				<xs:element name="q" type="xs:float" minOccurs="0" />
 			</xs:sequence>
 			<xs:choice>
 				<xs:element name="value" type="xs:float" />
 				<xs:element name="value" type="xs:boolean" />
 			</xs:choice>
+		</xs:choice>
+	</xs:group>
+
+	<xs:group name="change-element">
+		<xs:choice>
+			<xs:element name="property-change">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="if" minOccurs="0" maxOccurs="1">
+							<xs:complexType>
+								<xs:group ref="conditional" />
+							</xs:complexType>
+						</xs:element>
+
+						<xs:group ref="vector-props" />
+					</xs:sequence>
+
+					<xs:attribute name="target" type="xs:string" use="required" />
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="texture-change">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="if" minOccurs="0" maxOccurs="1">
+							<xs:complexType>
+								<xs:group ref="conditional" />
+							</xs:complexType>
+						</xs:element>
+
+						<xs:element name="path">
+							<xs:complexType>
+								<xs:simpleContent>
+										<xs:extension base="xs:string">
+											<xs:attribute name="target" type="xs:string" use="required" />
+										</xs:extension>
+									</xs:simpleContent>
+							</xs:complexType>
+						</xs:element>
+					</xs:sequence>
+
+					<xs:attribute name="target" type="xs:string" use="required" />
+				</xs:complexType>
+			</xs:element>
 		</xs:choice>
 	</xs:group>
 
@@ -49,7 +92,7 @@
 
 	<xs:group name="conditional-statement">
 		<xs:sequence>
-			<xs:group ref="conditional-value" minOccurs="2" maxOccurs="2"/>
+			<xs:group ref="conditional-value" minOccurs="2" maxOccurs="2" />
 		</xs:sequence>
 	</xs:group>
 
@@ -107,7 +150,7 @@
 								<xs:complexType>
 									<xs:simpleContent>
 										<xs:extension base="xs:string">
-											<xs:attribute name="key" type="xs:string" use="required"/>
+											<xs:attribute name="key" type="xs:string" use="required" />
 										</xs:extension>
 									</xs:simpleContent>
 								</xs:complexType>
@@ -120,21 +163,7 @@
 				<xs:element name="material-change" maxOccurs="unbounded">
 					<xs:complexType>
 						<xs:sequence>
-							<xs:element name="property-change" maxOccurs="unbounded">
-								<xs:complexType>
-									<xs:sequence>
-										<xs:element name="if" minOccurs="0" maxOccurs="1">
-											<xs:complexType>
-												<xs:group ref="conditional" />
-											</xs:complexType>
-										</xs:element>
-
-										<xs:group ref="vector-props" />
-									</xs:sequence>
-
-									<xs:attribute name="target" type="xs:string" use="required" />
-								</xs:complexType>
-							</xs:element>
+							<xs:group ref="change-element" minOccurs="0" maxOccurs="unbounded" />
 						</xs:sequence>
 
 						<xs:attribute name="target" type="xs:string" use="required" />
