@@ -69,65 +69,6 @@ void InitLogger(fs::path path) {
 #endif
 }
 
-void TestChange() {
-	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
-
-	spdlog::info("Starting modding");
-
-	auto file = DCXFile::ReadFile(sourceDCXpath);
-
-	if (!file) {
-		spdlog::error("Couldn't read the source material file");
-
-		return;
-	}
-
-	size_t actualDecompressedSize = 0;
-	byte* outFileBuffer = file->Decompress(actualDecompressedSize);
-
-	auto bnd = BNDFile::Parse(outFileBuffer, actualDecompressedSize);
-
-	if (!bnd) {
-		spdlog::error("Not good - BND");
-
-		return;
-	}
-
-	auto fabricMat = bnd->GetMatbin("P[BD_M_1710]_Fabric");
-
-	if (!fabricMat) {
-		spdlog::error("Not good - MATBIN");
-
-		return;
-	}
-
-	pugi::xml_document doc; 
-	pugi::xml_parse_result result = doc.load_file((pluginDir / "xml" / "examplemod.xml").c_str());
-	if (!result) {
-		std::cout << "Failed to load the XML\n";
-
-		return;
-	}
-
-	MaterialMod mod;
-
-	mod.AddMod(doc);
-
-	bnd->ApplyMod(mod);
-
-	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
-
-	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
-
-	newDcx->WriteFile(newDCXFilePath);
-
-	spdlog::info("Finished modding");
-
-	delete outFileBuffer;
-	delete bnd;
-	delete file;
-}
-
 void LoadXMLs() {
 	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
 
