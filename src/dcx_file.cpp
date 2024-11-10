@@ -85,18 +85,7 @@ DCXFile* DCXFile::ReadFile(const fs::path& filePath) {
 	}
 }
 
-DCXFile* DCXFile::Pack(byte* fileData, size_t dataLength, size_t compressedHeaderLength) {
-	// It's usually enough for the file with ~500K to spare
-	const size_t expectedCompressedSize = 5e6;
-
-	byte* compressedData = new byte[expectedCompressedSize];
-
-	int actualCompressedSize = CompressData(fileData, dataLength, compressedData, expectedCompressedSize);
-
-	return new DCXFile(actualCompressedSize, dataLength, compressedHeaderLength, compressedData);
-}
-
-byte* DCXFile::Decompress(size_t& decompressedSize) {
+byte* DCXFile::Decompress(size_t& decompressedSize) const {
 	byte* buffer = new byte[this->uncompressedSize];
 
 	int result = UncompressData(this->compressedFileData, this->compressedSize, buffer, this->uncompressedSize);

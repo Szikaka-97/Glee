@@ -8,6 +8,8 @@
 
 #include "material_mod.h"
 
+class DCXFile;
+
 class BNDFile {
 private:
 	struct MatbinSegment {
@@ -30,7 +32,8 @@ private:
 		dataLocation{start, length} {}
 	};
 
-	const byte* backingData;
+	byte* backingData;
+	size_t fileSize;
 	std::map<std::string, MatbinSegment> matbinFileOffsets;
 
 	bool unk04;
@@ -42,13 +45,19 @@ private:
 	byte format;
 	byte extended;
 
-	BNDFile(const byte* backingData);
+	BNDFile(byte* backingData, size_t size);
 public:
 	~BNDFile();
 
 	static BNDFile* Parse(const byte* data, size_t dataLength);
 
+	DCXFile* Pack(size_t compressedHeaderLength = 8);
+	static BNDFile* Unpack(const DCXFile* file);
+
 	MatbinFile* GetMatbin(std::string name);
 
 	void ApplyMod(const MaterialMod& mod);
+
+	const byte* GetData() { return this->backingData; }
+	size_t GetSize() { return this->fileSize; }
 };

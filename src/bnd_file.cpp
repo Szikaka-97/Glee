@@ -7,6 +7,8 @@
 namespace stdtime = std::chrono;
 
 #include "binary.h"
+#include "dcx_file.h"
+#include "compression.h"
 
 struct BNDFileHeaderInfo {
 	int dataOffset;
@@ -14,8 +16,9 @@ struct BNDFileHeaderInfo {
 	std::string name;
 };
 
-BNDFile::BNDFile(const byte* backingData):
-	backingData(backingData) {}
+BNDFile::BNDFile(byte* backingData, size_t size):
+	backingData(backingData),
+	fileSize(size) {}
 
 BNDFile::~BNDFile() {
 	for (auto& segment : this->matbinFileOffsets) {
@@ -23,6 +26,8 @@ BNDFile::~BNDFile() {
 			delete segment.second.matbin;
 		}
 	}
+
+	delete[] backingData;
 }
 
 // Always does
@@ -152,7 +157,7 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 			dataView.AssertInt64(0, "Hash table size");
 		}
 
-		BNDFile* result = new BNDFile(data);
+		BNDFile* result = new BNDFile(const_cast<byte *>(data), dataLength);
 		result->unk04 = unk04;
 		result->unk05 = unk05;
 		result->bigEndian = bigEndian;
@@ -174,6 +179,33 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 
 		return nullptr;
 	}
+}
+
+BNDFile* BNDFile::Unpack(const DCXFile* file) {
+	size_t actualDecompressedSize = 0;
+	byte* outFileBuffer = file->Decompress(actualDecompressedSize);
+
+	auto result = BNDFile::Parse(outFileBuffer, actualDecompressedSize);
+
+	if (!result) {
+		delete outFileBuffer;
+
+		return nullptr;
+	}
+	else {
+		return result;
+	}
+}
+
+DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
+	// It's usually enough for the file with ~500K to spare
+	const size_t expectedCompressedSize = 5e6;
+
+	byte* compressedData = new byte[expectedCompressedSize];
+
+	int actualCompressedSize = CompressData(this->backingData, this->fileSize, compressedData, expectedCompressedSize);
+
+	return new DCXFile(actualCompressedSize, this->fileSize, compressedHeaderLength, compressedData);
 }
 
 MatbinFile* BNDFile::GetMatbin(std::string name) {

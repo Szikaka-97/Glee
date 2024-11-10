@@ -5,6 +5,8 @@
 
 #include "binary.h"
 
+class BNDFile;
+
 class DCXFile {
 private:
 	size_t compressedSize;
@@ -18,9 +20,8 @@ public:
 	~DCXFile();
 	
 	static DCXFile* ReadFile(const std::filesystem::path& filePath);
-	static DCXFile* Pack(byte* fileData, size_t dataLength, size_t compressedHeaderLength = 8);
 
-	byte* Decompress(size_t& decompressedSize);
+	byte* Decompress(size_t& decompressedSize) const;
 
 	void WriteFile(const std::filesystem::path& filePath);
 

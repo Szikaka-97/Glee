@@ -74,18 +74,15 @@ void LoadXMLs() {
 
 	spdlog::info("Starting XML modding");
 
-	auto file = DCXFile::ReadFile(sourceDCXpath);
+	auto sourceMatFile = DCXFile::ReadFile(sourceDCXpath);
 
-	if (!file) {
+	if (!sourceMatFile) {
 		spdlog::error("Couldn't read the source material file");
 
 		return;
 	}
 
-	size_t actualDecompressedSize = 0;
-	byte* outFileBuffer = file->Decompress(actualDecompressedSize);
-
-	auto bnd = BNDFile::Parse(outFileBuffer, actualDecompressedSize);
+	auto bnd = BNDFile::Unpack(sourceMatFile);
 
 	if (!bnd) {
 		spdlog::error("Not good - BND");
@@ -129,14 +126,14 @@ void LoadXMLs() {
 
 	bnd->ApplyMod(mod);
 
-	auto newDcx = DCXFile::Pack(outFileBuffer, actualDecompressedSize);
+	auto destMatFile = bnd->Pack();
 
 	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
 
-	newDcx->WriteFile(newDCXFilePath);
+	destMatFile->WriteFile(newDCXFilePath);
 
 	delete bnd;
-	delete file;
+	delete sourceMatFile;
 
 	spdlog::info("Finished modding");
 }
