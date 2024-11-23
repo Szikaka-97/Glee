@@ -22,5 +22,8 @@
       <g> 0 </g>
       <b> 1 </b>
     </property-change>
+    <texture-change target="exampletexture">
+      <path> testTESTtest </path>
+    </texture-change>
   </material-change>
 </material-mod>

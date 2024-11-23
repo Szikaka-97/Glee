@@ -122,10 +122,35 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	}
 
+	if (data.GetPos() > this->dumbDataEnd) {
+		this->dumbDataEnd = data.GetPos();
+	}
+
 	data.SetOffset(currentOffset);
 }
 
-MatbinFile::MatbinFile(const byte* start, size_t length):
+void MatbinFile::ReadSampler(BufferView& data) {
+	byte* headerPos = data.GetPos();
+
+	std::string samplerName = data.ReadOffsetUTF16();
+	std::string path = data.ReadOffsetUTF16();
+	uint key = data.ReadInt32();
+	auto unk = data.ReadFloatArray<2>();
+
+	for (int i = 0; i < 0x14; i++) {
+		data.AssertByte(0, "MAB Padding");
+	}
+
+	this->samplers.push_back(TextureParam(
+		headerPos,
+		samplerName,
+		path,
+		key,
+		unk[0], unk[1]
+	));
+}
+
+MatbinFile::MatbinFile(byte* start, size_t length):
 start(start),
 end(start + length) {
 	BufferView dataView(start, end, false);
@@ -149,13 +174,19 @@ end(start + length) {
 	for (int i = 0; i < paramCount; i++) {
 		ReadParam(dataView);
 	}
+
+	for (int i = 0; i < samplerCount; i++) {
+		ReadSampler(dataView);
+
+		// spdlog::info(std::format("Sampler: {}, texture path: {}", this->samplers.back().name, this->samplers.back().GetPath()));
+	}
 }
 
 template<typename T, size_t Length>
 requires ParamValue<T, Length>
 bool ApplyPropertyChange(MatbinFile* mat, const PropertyChange& propChange) {
 	if (mat->HasProperty<T, Length>(propChange.target)) {
-		spdlog::info(std::format(" Changed property {}", propChange.target));
+		spdlog::info(" Changed property {}", propChange.target);
 
 		std::array<T, Length> values = mat->GetPropertyValues<T, Length>(propChange.target);
 
@@ -174,7 +205,7 @@ bool ApplyPropertyChange(MatbinFile* mat, const PropertyChange& propChange) {
 }
 
 void MatbinFile::ApplyMod(const MaterialChange& change) {
-	for (const auto& propChange : change.GetChanges()) {
+	for (const auto& propChange : change.GetPropertyChanges()) {
 		bool result = (
 			ApplyPropertyChange<bool, 1>(this, propChange)
 			||
@@ -199,10 +230,102 @@ void MatbinFile::ApplyMod(const MaterialChange& change) {
 			spdlog::error("No change");
 		}
 	}
+
+	int sizeChange = 0;
+
+	for (const auto& texChange : change.GetTextureChanges()) {
+		TextureParam* param;
+		GetSampler(param, texChange.target);
+
+		if (!param) {
+			// ERROR - No param
+
+			continue;
+		}
+
+		spdlog::info(" Changed sampler {}", texChange.target);
+
+		sizeChange += (texChange.newPath.length() - param->path.length()) * 2;
+
+		param->path = texChange.newPath;
+	}
+
+	spdlog::info("Size change: {}", sizeChange);
+
+	if (sizeChange != 0) {
+		size_t newLength = this->end - this->start + sizeChange;
+
+		byte* newLocation = new byte[newLength];
+
+		memcpy(newLocation, this->start, this->dumbDataEnd - this->start);
+
+		TransferParams(newLocation, newLength);
+
+		this->start = newLocation;
+		this->end = newLocation + newLength;
+
+		this->relocated = true;
+	}
 }
 
-inline bool MatbinFile::IsValid() {
-	return this->start != nullptr && this->end != nullptr;
+void MatbinFile::TransferParams(byte* newStart, size_t newLength) {
+	for (auto& param : boolParams) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (bool*) (newStart + offset);
+	}
+	for (auto& param : int1Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (int*) (newStart + offset);
+	}
+	for (auto& param : int2Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (int*) (newStart + offset);
+	}
+	for (auto& param : float1Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (float*) (newStart + offset);
+	}
+	for (auto& param : float2Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (float*) (newStart + offset);
+	}
+	for (auto& param : float3Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (float*) (newStart + offset);
+	}
+	for (auto& param : float4Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (float*) (newStart + offset);
+	}
+	for (auto& param : float5Params) {
+		int offset = (byte *) param.value - newStart;
+
+		param.value = (float*) (newStart + offset);
+	}
+
+	// Samplers are a bit more complicated
+	int currentOffset = this->dumbDataEnd - this->start;
+	BufferView dataView(newStart, newLength);
+
+	for (auto& sampler : samplers) {
+		int offset = sampler.header - this->start;
+		sampler.header = newStart + offset;
+
+		// Dirty solution, I'll think of something more clever later
+		((uint64_t *) sampler.header)[1] = currentOffset;
+
+		dataView.SetOffset(currentOffset);
+
+		dataView.WriteUTF16(sampler.name);
+		dataView.WriteUTF16(sampler.path);
+	}
 }
 
 MatbinFile::operator bool() {
@@ -221,3 +344,4 @@ void MatbinFile::GetParam(Param<float, 2>*& param, const std::string& propertyNa
 void MatbinFile::GetParam(Param<float, 3>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float3Params) }
 void MatbinFile::GetParam(Param<float, 4>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float4Params) }
 void MatbinFile::GetParam(Param<float, 5>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float5Params) }
+void MatbinFile::GetSampler(TextureParam*& param, const std::string& propertyName) { SEARCH_PARAMS(this->samplers) }

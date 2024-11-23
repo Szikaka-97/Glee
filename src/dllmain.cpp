@@ -139,6 +139,32 @@ void LoadXMLs() {
 	spdlog::info("Finished modding");
 }
 
+void TestBNDWrite() {
+	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
+
+	spdlog::info("Testing BND writing");
+
+	auto sourceMatFile = DCXFile::ReadFile(sourceDCXpath);
+
+	if (!sourceMatFile) {
+		spdlog::error("Couldn't read the source material file");
+
+		return;
+	}
+
+	auto bnd = BNDFile::Unpack(sourceMatFile);
+
+	if (!bnd) {
+		spdlog::error("Not good - BND");
+
+		return;
+	}
+
+	const auto destBNDpath = pluginDir / "test" / "out.bnd";
+
+	bnd->Write(destBNDpath);
+}
+
 void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	pluginDir = GetLibraryDir(hinstDLL);
 
@@ -146,7 +172,8 @@ void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
 	spdlog::info("Initializing Glee");
 
-	LoadXMLs();
+	// LoadXMLs();
+	TestBNDWrite();
 }
 
 void Dispose() {

@@ -3,6 +3,9 @@
 #include <regex>
 #include <iostream>
 
+#include "spdlog/spdlog.h"
+#include "../utils.h"
+
 PropertyChangeValue ReadNode(const pugi::xml_node& node) {
 	const static std::regex floatRegex("^\\s*\\d+(\\.\\d+)?\\s*$");
 	const static std::regex boolRegex("^\\s*(true)|(false)\\s*$", std::regex_constants::icase);
@@ -49,18 +52,39 @@ MaterialChange* MaterialChange::Parse(pugi::xml_node changeNode) {
 		const auto wPropNode = ReadNode(propertyChangeNode.find_child( FindNodeMultipleNames({"a", "w"}) ));
 		const auto qPropNode = ReadNode(propertyChangeNode.child("q"));
 		
-		result->changes.push_back({ targetProperty, {xPropNode, yPropNode, zPropNode, wPropNode, qPropNode} });
+		result->propertyChanges.push_back({ targetProperty, {xPropNode, yPropNode, zPropNode, wPropNode, qPropNode} });
+	}
+
+	for (const auto& textureChangeNode : changeNode.children("texture-change")) {
+		std::string targetProperty = textureChangeNode.attribute("target").as_string();
+
+		if (targetProperty.empty()) {
+			// ERROR - No texture target
+
+			continue;
+		}
+
+		std::string replacementPath = StringUtils::Trim(textureChangeNode.child("path").text().as_string());
+
+		result->textureChanges.push_back({ targetProperty, replacementPath });
 	}
 
 	return result;
 }
 
-const std::vector<PropertyChange>& MaterialChange::GetChanges() const {
-	return this->changes;
+const std::vector<PropertyChange>& MaterialChange::GetPropertyChanges() const {
+	return this->propertyChanges;
+}
+
+const std::vector<TextureChange>& MaterialChange::GetTextureChanges() const {
+	return this->textureChanges;
 }
 
 void MaterialChange::CopyChanges(MaterialChange* other) {
-	for (const auto propChange : other->changes) {
-		this->changes.push_back(propChange);
+	for (const auto propChange : other->propertyChanges) {
+		this->propertyChanges.push_back(propChange);
+	}
+	for (const auto texChange : other->textureChanges) {
+		this->textureChanges.push_back(texChange);
 	}
 }

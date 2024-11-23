@@ -130,9 +130,21 @@ void BufferView::AssertByte(byte expected, const std::string& message) {
 	}
 }
 
+void BufferView::AssertByte(byte expected) {
+	if (ReadByte() != expected) {
+		throw std::runtime_error(std::format("Assertion error at offset: {}", this->GetOffset()));
+	}
+}
+
 void BufferView::AssertInt32(int expected, const std::string& message) {
 	if (ReadInt32() != expected) {
 		throw std::runtime_error(message);
+	}
+}
+
+void BufferView::AssertInt32(int expected) {
+	if (ReadInt32() != expected) {
+		throw std::runtime_error(std::format("Assertion error at offset: {}", this->GetOffset()));
 	}
 }
 
@@ -142,10 +154,21 @@ void BufferView::AssertInt64(uint64_t expected, const std::string& message) {
 	}
 }
 
+void BufferView::AssertInt64(uint64_t expected) {
+	if (ReadInt64() != expected) {
+		throw std::runtime_error(std::format("Assertion error at offset: {}", this->GetOffset()));
+	}
+}
 
 void BufferView::AssertASCII(const std::string& expected, const std::string& message) {
 	if (ReadASCII(expected.length()) != expected) {
 		throw std::runtime_error(message);
+	}
+}
+
+void BufferView::AssertASCII(const std::string& expected) {
+	if (ReadASCII(expected.length()) != expected) {
+		throw std::runtime_error(std::format("Assertion error at offset: {}", this->GetOffset()));
 	}
 }
 
@@ -170,6 +193,27 @@ void BufferView::AssertASCII(const std::string& expected, int explicitLength, co
 	}
 }
 
+void BufferView::AssertASCII(const std::string& expected, int explicitLength) {
+	auto s = ReadASCII(explicitLength);
+
+	if (expected.length() < explicitLength) {
+		std::string extendedExpected = expected;
+
+		do {
+			extendedExpected.push_back('\0');
+		} while (extendedExpected.length() < explicitLength);
+
+		if (s != extendedExpected) {
+			throw std::runtime_error(std::format("Assertion error at offset: {} expected: {}; got: {}", GetOffset(), expected, s));
+		}
+	}
+	else {
+		if (s != expected) {
+			throw std::runtime_error(std::format("Assertion error at offset: {} expected: {}; got: {}", GetOffset(), expected, s));
+		}
+	}
+}
+
 void BufferView::SetPos(byte* pos) {
 	if (pos >= this->start && pos < this->end) {
 		this->current = pos;
@@ -183,6 +227,20 @@ void BufferView::SetPos(byte* pos) {
 
 void BufferView::Advance(int movement) {
 	SetOffset(this->GetOffset() + movement);
+}
+
+void BufferView::WriteUTF16(const std::string& s) {
+	for (char c : s) {
+		*this->current = c;
+		*(this->current + 1) = '\0';
+
+		this->Advance(2);
+	}
+
+	*this->current = '\0';
+	*(this->current + 1) = '\0';
+
+	this->Advance(2);
 }
 
 void BufferView::SetOffset(size_t offset) {

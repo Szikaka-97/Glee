@@ -7,6 +7,7 @@
 
 #include "binary.h"
 #include "material_change.h"
+#include "utils.h"
 
 #include "spdlog/spdlog.h"
 
@@ -26,7 +27,7 @@ private:
 	struct Param {
 		const std::string name;
 		const int key;
-		const T* value;
+		T* value;
 
 		static constexpr byte ParamTypeMask() {
 			return {
@@ -38,7 +39,7 @@ private:
 			};
 		}
 
-		Param(const std::string& name, int key, const T* value):
+		Param(const std::string& name, int key, T* value):
 		name(name),
 		key(key),
 		value(value) {}
@@ -48,12 +49,29 @@ private:
 		}
 	};
 
-	const byte* start;
-	const byte* end;
+	struct TextureParam {
+		byte* header;
+		const std::string name;
+		std::string path;
+		const uint key;
+		const std::array<float, 2> unk;
+
+		TextureParam(byte* header, const std::string& name, std::string path, uint key, const float unk1, const float unk2):
+		header(header),
+		name(name),
+		path(path),
+		key(key),
+		unk({unk1, unk2}) { }
+	};
+
+	byte* start;
+	byte* end;
+	byte* dumbDataEnd;
 
 	std::string shaderPath;
 	std::string sourcePath;
 	unsigned int key;
+	bool relocated;
 
 	std::vector<Param<bool>> boolParams;
 	std::vector<Param<int, 1>> int1Params;
@@ -63,10 +81,14 @@ private:
 	std::vector<Param<float, 3>> float3Params;
 	std::vector<Param<float, 4>> float4Params;
 	std::vector<Param<float, 5>> float5Params;
+	std::vector<TextureParam> samplers;
 
 	std::map<std::string, int> propertyOffsets;
 
 	void ReadParam(BufferView& data);
+	void ReadSampler(BufferView& data);
+
+	void TransferParams(byte* newStart, size_t newLength);
 
 	void GetParam(Param<bool, 1>*& param, const std::string& propertyName);
 	void GetParam(Param<int, 1>*& param, const std::string& propertyName);
@@ -76,8 +98,9 @@ private:
 	void GetParam(Param<float, 3>*& param, const std::string& propertyName);
 	void GetParam(Param<float, 4>*& param, const std::string& propertyName);
 	void GetParam(Param<float, 5>*& param, const std::string& propertyName);
+	void GetSampler(TextureParam*& param, const std::string& propertyName);
 public:
-	MatbinFile(const byte* start, size_t length);
+	MatbinFile(byte* start, size_t length);
 
 	template<typename T, size_t Length>
 	requires ParamValue<T, Length>
@@ -123,9 +146,13 @@ public:
 
 	void ApplyMod(const MaterialChange& change);
 
-	byte* GetStart() { return const_cast<byte *>(this->start); }
-	byte* GetEnd() { return const_cast<byte *>(this->end); }
+	inline byte* GetStart() { return this->start; }
+	inline byte* GetEnd() { return this->end; }
 
-	bool IsValid();
+	inline size_t GetLength() { return this->end - this->start; }
+
+	inline bool NeedsRelocating() { return this->relocated; }
+
+	inline bool IsValid() { return this->start != nullptr && this->end != nullptr; }
 	operator bool();
 };

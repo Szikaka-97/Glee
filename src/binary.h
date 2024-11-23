@@ -99,15 +99,27 @@ public:
 
 	void AssertByte(byte expected, const std::string& message);
 
+	void AssertByte(byte expected);
+
 	void AssertInt32(int expected, const std::string& message);
+
+	void AssertInt32(int expected);
 
 	void AssertInt64(uint64_t expected, const std::string& message);
 
+	void AssertInt64(uint64_t expected);
+
 	void AssertASCII(const std::string& expected, const std::string& message);
+
+	void AssertASCII(const std::string& expected);
 
 	void AssertASCII(const std::string& expected, int explicitLength, const std::string& message);
 
+	void AssertASCII(const std::string& expected, int explicitLength);
+
 	void Advance(int movement);
+
+	void WriteUTF16(const std::string& s);
 
 	byte* GetPos();
 	size_t GetOffset();

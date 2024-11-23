@@ -42,6 +42,7 @@ if (WIN32)
     src/dcx_file.cpp
     src/matbin_file.cpp
     src/compression.cpp
+    src/utils.cpp
     src/mat/material_mod.cpp
     src/mat/material_change.cpp
   )
@@ -53,6 +54,7 @@ else(WIN32)
     src/dcx_file.cpp
     src/matbin_file.cpp
     src/compression.cpp
+    src/utils.cpp
     src/mat/material_mod.cpp
     src/mat/material_change.cpp
   )

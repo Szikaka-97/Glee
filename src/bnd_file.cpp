@@ -10,18 +10,12 @@ namespace stdtime = std::chrono;
 #include "dcx_file.h"
 #include "compression.h"
 
-struct BNDFileHeaderInfo {
-	int dataOffset;
-	int size;
-	std::string name;
-};
-
 BNDFile::BNDFile(byte* backingData, size_t size):
 	backingData(backingData),
 	fileSize(size) {}
 
 BNDFile::~BNDFile() {
-	for (auto& segment : this->matbinFileOffsets) {
+	for (auto& segment : this->matbinFiles) {
 		if (segment.second.loaded) {
 			delete segment.second.matbin;
 		}
@@ -67,12 +61,12 @@ byte DecodeFlags(byte readFormat, bool reverseBits) {
 	}
 }
 
-BNDFileHeaderInfo ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits) {
-	byte flags = DecodeFlags(dataView.ReadBoolean(), reverseBits);
-	dataView.AssertByte(0, "Padding");
-	dataView.AssertByte(0, "Padding");
-	dataView.AssertByte(0, "Padding");
-	dataView.AssertInt32(-1, "Padding");
+BNDFile::BNDFileInfo BNDFile::ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits) {
+	byte flags = DecodeFlags(dataView.ReadByte(), reverseBits);
+	dataView.AssertByte(0);
+	dataView.AssertByte(0);
+	dataView.AssertByte(0);
+	dataView.AssertInt32(-1);
 
 	int fileSize = dataView.ReadInt64();
 
@@ -94,25 +88,53 @@ BNDFileHeaderInfo ReadBNDFileHeader(BufferView& dataView, byte format, bool reve
 		id = dataView.ReadInt32();
 	}
 
-	int nameOffset = 0;
-
-	std::string name;
+	int pathOffset = 0;
+	std::string filePath;
 	if (HasNames(format)) {
-		nameOffset = dataView.ReadInt32();
+		pathOffset = dataView.ReadInt32();
 
 		// Technically, the names can be either UTF16 or Shift JIS, but in the material file they are always UTF16
-
-		name = dataView.ReadOffsetUTF16(nameOffset);
-
-		if (name.ends_with(".matbin")) {
-			int nameStart = name.find_last_of("\\") + 1;
-
-			// 7 for the length of ".matbin"
-			name = name.substr(nameStart, name.length() - nameStart - 7);
-		}
+		filePath = dataView.ReadOffsetUTF16(pathOffset);
 	}
 
-	return {dataOffset, fileSize, name};
+	byte* fileContent = new byte[uncompressedSize];
+
+	memcpy(fileContent, this->backingData + dataOffset, uncompressedSize);
+
+	return BNDFileInfo(filePath, format, fileContent, uncompressedSize);
+}
+
+size_t BNDFile::GetBNDFileHeaderSize(const BNDFile::BNDFileInfo& fileInfo) {
+	byte format = fileInfo.format;
+
+	/*
+		1 byte flags = DecodeFlags(dataView.ReadByte(), reverseBits);
+		1 dataView.AssertByte(0, "Padding");
+		1 dataView.AssertByte(0, "Padding");
+		1 dataView.AssertByte(0, "Padding");
+		1 dataView.AssertInt32(-1, "Padding");
+		8 int fileSize = dataView.ReadInt64();
+	*/
+	size_t length = 13;
+
+	if (HasCompression(format)) {
+		// 8 uncompressedSize = dataView.ReadInt64();
+		length += 8;
+	}
+
+	if (HasLongOffsets(format)) {
+		// 8 dataOffset = dataView.ReadInt64();
+		length += 8;
+	}
+	else {
+		// 4 dataOffset = dataView.ReadInt32();
+		length += 4;
+	}
+
+	if (HasIDs(format)) {
+		// 4 id = dataView.ReadInt32();
+		length += 4;
+	}
 }
 
 BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
@@ -167,10 +189,12 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 		result->format = format;
 		result->extended = extended;
 
-		for (int i = 0; i < fileCount; i++) {
-			auto fileHeader = ReadBNDFileHeader(dataView, format, reverseBits);
+		result->headerSize = dataView.GetOffset();
 
-			result->matbinFileOffsets[fileHeader.name] = MatbinSegment(const_cast<byte *>(data + fileHeader.dataOffset), fileHeader.size);
+		for (int i = 0; i < fileCount; i++) {
+			auto fileHeader = result->ReadBNDFileHeader(dataView, format, reverseBits);
+
+			result->matbinFiles[fileHeader.GetName()] = fileHeader;
 		}
 
 		return result;
@@ -179,6 +203,14 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 
 		return nullptr;
 	}
+}
+
+void BNDFile::Write(const std::filesystem::path& dest) {
+	std::ofstream file(dest, std::ios::binary);
+
+	file << ToBytes<4>("BND4");
+
+	file.close();
 }
 
 BNDFile* BNDFile::Unpack(const DCXFile* file) {
@@ -197,7 +229,21 @@ BNDFile* BNDFile::Unpack(const DCXFile* file) {
 	}
 }
 
+void BNDFile::Relocate() {
+	size_t currentOffset = this->headerSize;
+
+	byte* newLocation = new byte[this->fileSize + this->sizeDelta];
+
+	memcpy(newLocation, this->backingData, this->headerSize);
+
+	size_t spaceNeededForFileHeaders = 0;
+}
+
 DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
+	if (this->sizeDelta != 0) {
+		// Relocate();
+	}
+
 	// It's usually enough for the file with ~500K to spare
 	const size_t expectedCompressedSize = 5e6;
 
@@ -209,8 +255,8 @@ DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 }
 
 MatbinFile* BNDFile::GetMatbin(std::string name) {
-	if (this->matbinFileOffsets.contains(name)) {
-		auto& segmentInfo = this->matbinFileOffsets[name];
+	if (this->matbinFiles.contains(name)) {
+		auto& segmentInfo = this->matbinFiles[name];
 
 		if (!segmentInfo.loaded) {
 			auto offsetInfo = segmentInfo.dataLocation;
@@ -228,11 +274,26 @@ MatbinFile* BNDFile::GetMatbin(std::string name) {
 void BNDFile::ApplyMod(const MaterialMod& mod) {
 	const auto changes = mod.GetChanges();
 
-	for (const auto& change : changes) {
-		if (this->matbinFileOffsets.contains(change.first)) {
-			spdlog::info(std::format("Modding material {}", change.first));
 
-			this->GetMatbin(change.first)->ApplyMod(*change.second);
+	for (const auto& change : changes) {
+		spdlog::info("Changes: {}", change.first);
+
+		if (this->matbinFiles.contains(change.first)) {
+			spdlog::info("Modding material {}", change.first);
+
+			auto matbin = this->GetMatbin(change.first);
+
+			size_t oldLength = matbin->GetLength();
+
+			matbin->ApplyMod(*change.second);
+
+			if (matbin->NeedsRelocating()) {
+				spdlog::info("Material {} needs relocating", change.first);
+
+				this->sizeDelta += matbin->GetLength() - oldLength;
+			}
 		}
 	}
+
+	spdlog::info("Overall size Change: {}", this->sizeDelta);
 }
