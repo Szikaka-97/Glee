@@ -25,5 +25,6 @@ namespace StringUtils {
 }
 
 namespace PathUtils {
+	std::filesystem::path ChangeSlashes(const std::filesystem::path& p);
 	std::filesystem::path StemWindows(const std::filesystem::path& p);
 }

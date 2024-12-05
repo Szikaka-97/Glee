@@ -10,6 +10,58 @@
 
 class DCXFile;
 
+struct BNDFileHeader {
+	bool unk04;
+	bool unk05;
+	bool bigEndian;
+	bool reverseFlagBits;
+	int fileCount;
+	uint64_t version;
+	bool unicode;
+	byte format;
+};
+
+struct BindedFileInfo {
+	std::string path;
+	byte format;
+	bool loaded;
+
+	union {
+		struct {
+			byte* start;
+			int length;
+		} dataLocation;
+		MatbinFile* matbin;
+	};
+
+	BindedFileInfo():
+		loaded(false),
+		path(""),
+		format(0),
+		dataLocation{0, 0} {}
+
+	BindedFileInfo(const std::string& path, byte format, byte* position, int length):
+		loaded(false),
+		path(path),
+		format(format),
+		dataLocation{position, length} {}
+
+	std::string GetName() const;
+
+	std::string GetNameWithParentFolder() const;
+
+	uint64_t GetFileSize() const {
+		if (this->loaded) {
+			return this->matbin->GetLength();
+		}
+		else {
+			return this->dataLocation.length;
+		}
+	}
+
+	static constexpr int GetSize();
+};
+
 class BNDFile {
 private:
 	struct OldMatbinSegment {
@@ -65,25 +117,17 @@ private:
 	};
 
 	byte* backingData;
-	size_t headerSize;
 	size_t fileSize;
-	std::map<std::string, BNDFileInfo> matbinFiles;
+	std::vector<BindedFileInfo> bindedFileInfos;
+	std::map<std::string, BindedFileInfo*> matbinFileMap;
 
-	bool unk04;
-	bool unk05;
-	bool bigEndian;
-	bool bitBigEndian;
-	std::array<byte, 8> version;
-	bool unicode;
-	byte format;
-	byte extended;
+	BNDFileHeader header;
 
 	int sizeDelta = 0;
 
 	BNDFile(byte* backingData, size_t size);
 
-	BNDFileInfo ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits);
-	size_t GetBNDFileHeaderSize(const BNDFileInfo& fileInfo);
+	BindedFileInfo ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits);
 public:
 	~BNDFile();
 

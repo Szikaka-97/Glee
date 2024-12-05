@@ -160,6 +160,23 @@ void TestBNDWrite() {
 		return;
 	}
 
+	const auto sourceBNDpath = pluginDir / "test" / "src.bnd";
+
+	std::ofstream file(sourceBNDpath, std::ios::binary);
+
+	file.write((char *) bnd->GetData(), bnd->GetSize());
+
+// Make a change
+
+	pugi::xml_document modDoc;
+
+	modDoc.load_file((pluginDir / "recolors" / "examplemod.xml").c_str());
+
+	MaterialMod mod{};
+	mod.AddMod(modDoc);
+
+	bnd->ApplyMod(mod);
+
 	const auto destBNDpath = pluginDir / "test" / "out.bnd";
 
 	bnd->Write(destBNDpath);

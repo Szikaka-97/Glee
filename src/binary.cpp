@@ -1,6 +1,7 @@
 #include "binary.h"
 
 #include <format>
+#include <fstream>
 
 #include "spdlog/spdlog.h"
 
@@ -229,6 +230,98 @@ void BufferView::Advance(int movement) {
 	SetOffset(this->GetOffset() + movement);
 }
 
+void BufferView::WriteInt32(int value) {
+	if (current + sizeof(int) > end) {
+		throw std::out_of_range(
+			std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, sizeof(int))
+		);
+	}
+
+	if (!bigEndian) {
+		memcpy(current, (byte *) &value, sizeof(int));
+
+		current += sizeof(int);
+	}
+	else {
+		std::array<byte, sizeof(int)> resultArray = {
+			(byte) value >> 24,
+			(byte) value >> 16,
+			(byte) value >> 8,
+			(byte) value
+		};
+		
+		Write(resultArray);
+	}
+}
+
+void BufferView::WriteFloat(float value) {
+	if (current + sizeof(int) > end) {
+		throw std::out_of_range(
+			std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, sizeof(int))
+		);
+	}
+
+	uint32_t byteValue = *reinterpret_cast<uint32_t *>(&value);
+
+	if (!bigEndian) {
+		memcpy(current, (byte *) &value, sizeof(int));
+
+		current += sizeof(int);
+	}
+	else {
+		std::array<byte, sizeof(int)> resultArray = {
+			(byte) byteValue >> 24,
+			(byte) byteValue >> 16,
+			(byte) byteValue >> 8,
+			(byte) byteValue
+		};
+		
+		Write(resultArray);
+	}
+}
+
+void BufferView::WriteInt64(uint64_t value) {
+	if (current + sizeof(uint64_t) > end) {
+		throw std::out_of_range(
+			std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, sizeof(uint64_t))
+		);
+	}
+
+	if (!bigEndian) {
+		memcpy(current, (byte *) &value, sizeof(uint64_t));
+
+		current += sizeof(uint64_t);
+	}
+	else {
+		std::array<byte, sizeof(uint64_t)> resultArray = {
+			(byte) value >> 56,
+			(byte) value >> 48,
+			(byte) value >> 40,
+			(byte) value >> 32,
+			(byte) value >> 24,
+			(byte) value >> 16,
+			(byte) value >> 8,
+			(byte) value
+		};
+		
+		Write(resultArray);
+	}
+}
+
+void BufferView::WriteASCII(const std::string& value, bool nullTerminate) {
+	for (char c : value) {
+		*this->current = c;
+
+		this->Advance(1);
+	}
+
+	if (nullTerminate) {
+		*this->current = '\0';
+
+		this->Advance(1);
+	}
+}
+
 void BufferView::WriteUTF16(const std::string& s) {
 	for (char c : s) {
 		*this->current = c;
@@ -244,7 +337,7 @@ void BufferView::WriteUTF16(const std::string& s) {
 }
 
 void BufferView::SetOffset(size_t offset) {
-	if (this->start + offset < this->end) {
+	if (this->start + offset <= this->end) {
 		this->current = const_cast<byte *>(this->start + offset);
 	}
 	else {
@@ -270,21 +363,24 @@ void BufferView::SetBigEndian(bool setBigEndian) {
 	this->bigEndian = setBigEndian;
 }
 
-std::array<byte, 4> ToBytes(int i, bool bigEndian) {
-	std::array<byte, 4> result = {0};
-
-	if (bigEndian) {
-		result[0] = (byte) (i >> 24);
-		result[1] = (byte) (i >> 16);
-		result[2] = (byte) (i >> 8);
-		result[3] = (byte) i;
-	}
-	else {
-		result[0] = (byte) i;
-		result[1] = (byte) (i >> 8);
-		result[2] = (byte) (i >> 16);
-		result[3] = (byte) (i >> 24);
+void WriteUTF16ToStream(std::ostream& o, const std::string& s) {
+	for (char c : s) {
+		if (c) {
+			o << c << '\0';
+		}
 	}
 
-	return result;
+	o << '\0' << '\0';
+}
+
+void DumpToFile(const std::filesystem::path& p, const byte* start, const byte* end) {
+	if (end < start) {
+		return;
+	}
+
+	std::ofstream output(p, std::ios::binary);
+
+	output.write((char *) start, end - start);
+
+	output.close();
 }

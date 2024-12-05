@@ -15,9 +15,9 @@ BNDFile::BNDFile(byte* backingData, size_t size):
 	fileSize(size) {}
 
 BNDFile::~BNDFile() {
-	for (auto& segment : this->matbinFiles) {
-		if (segment.second.loaded) {
-			delete segment.second.matbin;
+	for (auto& segment : this->bindedFileInfos) {
+		if (segment.loaded) {
+			delete segment.matbin;
 		}
 	}
 
@@ -34,11 +34,6 @@ bool HasLongOffsets(byte format) {
 	return format & 0b00010000;
 }
 
-// Never does
-bool HasIDs(byte format) {
-	return format & 0b00000010;
-}
-
 // Always does
 bool HasNames(byte format) {
 	return format & 0b00001100;
@@ -49,7 +44,7 @@ byte DecodeFlags(byte readFormat, bool reverseBits) {
 		byte result = 0;
 
 		for (int i = 0; i < 8; i++) {
-			result |= 128 * (readFormat & 1) >> i;
+			result |= (128 * (readFormat & 1)) >> i;
 
 			readFormat >>= 1;
 		}
@@ -61,7 +56,34 @@ byte DecodeFlags(byte readFormat, bool reverseBits) {
 	}
 }
 
-BNDFile::BNDFileInfo BNDFile::ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits) {
+constexpr int BindedFileInfo::GetSize() {
+	return (
+		1 // flags
+		+ 3 // padding
+		+ 4 // dataView.AssertInt32(-1);
+		+ 8 // int fileSize = dataView.ReadInt64();
+		+ 8	// int uncompressedSize = dataView.ReadInt64();
+		+ 8 // int dataOffset = dataView.ReadInt64();
+		+ 4// int pathOffset = dataView.ReadInt32();
+	);
+}
+
+std::string BindedFileInfo::GetName() const {
+	std::filesystem::path networkPath = this->path;
+
+	return PathUtils::StemWindows(networkPath).string();
+}
+
+std::string BindedFileInfo::GetNameWithParentFolder() const {
+	std::filesystem::path networkPath = this->path;
+	networkPath = PathUtils::ChangeSlashes(networkPath);
+	
+	return (networkPath.parent_path().stem() / networkPath.stem()).string();
+}
+
+
+BindedFileInfo BNDFile::ReadBNDFileHeader(BufferView& dataView, byte format, bool reverseBits) {
+	// I am assuming a format of 01110100, since that's what all these have
 	byte flags = DecodeFlags(dataView.ReadByte(), reverseBits);
 	dataView.AssertByte(0);
 	dataView.AssertByte(0);
@@ -70,71 +92,16 @@ BNDFile::BNDFileInfo BNDFile::ReadBNDFileHeader(BufferView& dataView, byte forma
 
 	int fileSize = dataView.ReadInt64();
 
-	int uncompressedSize = fileSize;
-	if (HasCompression(format)) {
-		uncompressedSize = dataView.ReadInt64();
-	}
+	int uncompressedSize = dataView.ReadInt64();
+	int dataOffset = dataView.ReadInt64();
 
-	int dataOffset = 0;
-	if (HasLongOffsets(format)) {
-		dataOffset = dataView.ReadInt64();
-	}
-	else {
-		dataOffset = dataView.ReadInt32();
-	}
-
-	int id = -1;
-	if (HasIDs(format)) {
-		id = dataView.ReadInt32();
-	}
-
-	int pathOffset = 0;
-	std::string filePath;
-	if (HasNames(format)) {
-		pathOffset = dataView.ReadInt32();
-
-		// Technically, the names can be either UTF16 or Shift JIS, but in the material file they are always UTF16
-		filePath = dataView.ReadOffsetUTF16(pathOffset);
-	}
-
+	int pathOffset = dataView.ReadInt32();
+	std::string filePath = dataView.ReadOffsetUTF16(pathOffset);
 	byte* fileContent = new byte[uncompressedSize];
 
 	memcpy(fileContent, this->backingData + dataOffset, uncompressedSize);
 
-	return BNDFileInfo(filePath, format, fileContent, uncompressedSize);
-}
-
-size_t BNDFile::GetBNDFileHeaderSize(const BNDFile::BNDFileInfo& fileInfo) {
-	byte format = fileInfo.format;
-
-	/*
-		1 byte flags = DecodeFlags(dataView.ReadByte(), reverseBits);
-		1 dataView.AssertByte(0, "Padding");
-		1 dataView.AssertByte(0, "Padding");
-		1 dataView.AssertByte(0, "Padding");
-		1 dataView.AssertInt32(-1, "Padding");
-		8 int fileSize = dataView.ReadInt64();
-	*/
-	size_t length = 13;
-
-	if (HasCompression(format)) {
-		// 8 uncompressedSize = dataView.ReadInt64();
-		length += 8;
-	}
-
-	if (HasLongOffsets(format)) {
-		// 8 dataOffset = dataView.ReadInt64();
-		length += 8;
-	}
-	else {
-		// 4 dataOffset = dataView.ReadInt32();
-		length += 4;
-	}
-
-	if (HasIDs(format)) {
-		// 4 id = dataView.ReadInt32();
-		length += 4;
-	}
+	return BindedFileInfo(filePath, flags, fileContent, uncompressedSize);
 }
 
 BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
@@ -156,7 +123,7 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 
 		int fileCount = dataView.ReadInt32();
 		dataView.AssertInt64(0x40, "Header size");
-		std::array<byte, 8> version = dataView.Read<8>();
+		uint64_t version = dataView.ReadInt64();
 
 		int fileHeaderSize = dataView.ReadInt64();
 
@@ -179,22 +146,36 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 			dataView.AssertInt64(0, "Hash table size");
 		}
 
+		BNDFileHeader header {
+			unk04,
+			unk05,
+			bigEndian,
+			reverseBits,
+			fileCount,
+			version,
+			unicode,
+			format
+		};
+
 		BNDFile* result = new BNDFile(const_cast<byte *>(data), dataLength);
-		result->unk04 = unk04;
-		result->unk05 = unk05;
-		result->bigEndian = bigEndian;
-		result->bitBigEndian = reverseBits;
-		result->version = version;
-		result->unicode = unicode;
-		result->format = format;
-		result->extended = extended;
 
-		result->headerSize = dataView.GetOffset();
-
+		result->header = header;
+		result->bindedFileInfos.reserve(fileCount);
 		for (int i = 0; i < fileCount; i++) {
 			auto fileHeader = result->ReadBNDFileHeader(dataView, format, reverseBits);
 
-			result->matbinFiles[fileHeader.GetName()] = fileHeader;
+			result->bindedFileInfos.push_back(fileHeader);
+
+			if (result->matbinFileMap.contains(fileHeader.GetName())) {
+				auto newName = fileHeader.GetNameWithParentFolder();
+
+				spdlog::warn("Path conflict: {} and {}, the second one will be saved as {}", result->matbinFileMap[fileHeader.GetName()]->path, fileHeader.path, newName);
+
+				result->matbinFileMap[newName] = &result->bindedFileInfos[i];
+			}
+			else {
+				result->matbinFileMap[fileHeader.GetName()] = &result->bindedFileInfos[i];
+			}
 		}
 
 		return result;
@@ -209,6 +190,70 @@ void BNDFile::Write(const std::filesystem::path& dest) {
 	std::ofstream file(dest, std::ios::binary);
 
 	file << ToBytes<4>("BND4");
+
+	file << ToBytes(this->header.unk04);
+	file << ToBytes(this->header.unk05);
+	file << ToBytes((bool) 0);
+	file << ToBytes((bool) 0);
+	file << ToBytes((bool) 0);
+	file << ToBytes(this->header.bigEndian);
+	file << ToBytes(!this->header.reverseFlagBits);
+	file << ToBytes((bool) 0);
+	file << ToBytes((int) this->bindedFileInfos.size(), this->header.bigEndian);
+	file << ToBytes((uint64_t) 0x40, this->header.bigEndian);
+	file << ToBytes(this->header.version, this->header.bigEndian);
+	file << ToBytes((uint64_t) BindedFileInfo::GetSize(), this->header.bigEndian);
+	file << ToBytes((uint64_t) 0);
+	file << ToBytes(this->header.unicode);
+	file << ToBytes(DecodeFlags(this->header.format, this->header.reverseFlagBits));
+	file << ToBytes((byte) 4);
+	file << ToBytes((byte) 0);
+	file << ToBytes((int) 0);
+	file << ToBytes((uint64_t) 0);
+
+	size_t headersStartOffset = file.tellp();
+	size_t baseOffset = headersStartOffset + this->bindedFileInfos.size() * BindedFileInfo::GetSize();
+	size_t nameOffset = 0;
+
+	int* fileOffsetLocations = new int[this->bindedFileInfos.size()];
+
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		file << ToBytes(DecodeFlags(0b01000000, this->header.reverseFlagBits));
+		file << ToBytes((byte) 0);
+		file << ToBytes((byte) 0);
+		file << ToBytes((byte) 0);
+		file << ToBytes(-1, this->header.bigEndian);
+		file << ToBytes(bindedFile.GetFileSize(), this->header.bigEndian);
+		file << ToBytes(bindedFile.GetFileSize(), this->header.bigEndian);
+		file << ToBytes((int64_t) -1); // File offset
+		file << ToBytes((int) (baseOffset + nameOffset), this->header.bigEndian); // Name offset
+
+		nameOffset += (bindedFile.path.size() + 1) * 2;
+	}
+
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		WriteUTF16ToStream(file, bindedFile.path);
+	}
+
+	int i = 0;
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		auto currentPos = file.tellp();
+
+		file.seekp(headersStartOffset + (i * BindedFileInfo::GetSize()) + 24);
+
+		file << ToBytes((int64_t) currentPos, this->header.bigEndian);
+
+		file.seekp(currentPos);
+
+		if (bindedFile.loaded) {
+			file.write((char *) bindedFile.matbin->GetStart(), bindedFile.matbin->GetLength());
+		}
+		else {
+			file.write((char *) bindedFile.dataLocation.start, bindedFile.dataLocation.length);
+		}
+
+		i++;
+	}
 
 	file.close();
 }
@@ -230,18 +275,12 @@ BNDFile* BNDFile::Unpack(const DCXFile* file) {
 }
 
 void BNDFile::Relocate() {
-	size_t currentOffset = this->headerSize;
 
-	byte* newLocation = new byte[this->fileSize + this->sizeDelta];
-
-	memcpy(newLocation, this->backingData, this->headerSize);
-
-	size_t spaceNeededForFileHeaders = 0;
 }
 
 DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 	if (this->sizeDelta != 0) {
-		// Relocate();
+		Relocate();
 	}
 
 	// It's usually enough for the file with ~500K to spare
@@ -255,17 +294,17 @@ DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 }
 
 MatbinFile* BNDFile::GetMatbin(std::string name) {
-	if (this->matbinFiles.contains(name)) {
-		auto& segmentInfo = this->matbinFiles[name];
+	if (this->matbinFileMap.contains(name)) {
+		auto segmentInfo = this->matbinFileMap[name];
 
-		if (!segmentInfo.loaded) {
-			auto offsetInfo = segmentInfo.dataLocation;
+		if (!segmentInfo->loaded) {
+			auto offsetInfo = segmentInfo->dataLocation;
 
-			segmentInfo.matbin = new MatbinFile(offsetInfo.start, offsetInfo.length);
-			segmentInfo.loaded = true;
+			segmentInfo->matbin = new MatbinFile(offsetInfo.start, offsetInfo.length);
+			segmentInfo->loaded = true;
 		}
 
-		return segmentInfo.matbin;
+		return segmentInfo->matbin;
 	}
 
 	return nullptr;
@@ -274,11 +313,10 @@ MatbinFile* BNDFile::GetMatbin(std::string name) {
 void BNDFile::ApplyMod(const MaterialMod& mod) {
 	const auto changes = mod.GetChanges();
 
-
 	for (const auto& change : changes) {
 		spdlog::info("Changes: {}", change.first);
 
-		if (this->matbinFiles.contains(change.first)) {
+		if (this->matbinFileMap.contains(change.first)) {
 			spdlog::info("Modding material {}", change.first);
 
 			auto matbin = this->GetMatbin(change.first);

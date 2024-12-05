@@ -3,8 +3,8 @@
 #include <exception>
 
 // The stuff you'll do to avoid writing code...
-#define SEARCH_PARAMS(arrayName) for (auto& p : arrayName) { if (p.name == propertyName) { param = &p; break; } };
-	
+#define SEARCH_PARAMS(arrayName) for (auto& p : arrayName) { if (this->params[p.infoIndex].name == propertyName) { param = &p; break; } };
+
 enum ParamType {
 	Bool = 0,
 	Int = 4,
@@ -27,17 +27,15 @@ void MatbinFile::ReadParam(BufferView& data) {
 		data.AssertByte(0, "MAB Padding");
 	}
 
-	auto currentOffset = data.GetOffset();
+	ParamInfo info{paramName, this->start + valueOffset, key, type};
 
-	data.SetOffset(valueOffset);
+	int infoIndex = this->params.size();
+	this->params.push_back(info);
 
 	switch (type) {
 	case ParamType::Bool:
 	{
-		auto values = (bool *) data.GetPos();
-		data.Skip<bool>();
-
-		auto param = MatbinFile::Param<bool, 1>(paramName, key, values);
+		auto param = MatbinFile::Param<bool, 1>(infoIndex);
 
 		this->boolParams.push_back(param);
 
@@ -45,10 +43,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Int:
 	{
-		auto values = (int *) data.GetPos();
-		data.Skip<int>();
-
-		auto param = MatbinFile::Param<int, 1>(paramName, key, values);
+		auto param = MatbinFile::Param<int, 1>(infoIndex);
 
 		this->int1Params.push_back(param);
 
@@ -56,10 +51,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Int2:
 	{
-		auto values = (int *) data.GetPos();
-		data.Skip<int, 2>();
-
-		auto param = MatbinFile::Param<int, 2>(paramName, key, values);
+		auto param = MatbinFile::Param<int, 2>(infoIndex);
 
 		this->int2Params.push_back(param);
 
@@ -67,10 +59,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Float:
 	{
-		auto values = (float *) data.GetPos();
-		data.Skip<float, 1>();
-
-		auto param = MatbinFile::Param<float, 1>(paramName, key, values);
+		auto param = MatbinFile::Param<float, 1>(infoIndex);
 
 		this->float1Params.push_back(param);
 
@@ -78,10 +67,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Float2:
 	{
-		auto values = (float *) data.GetPos();
-		data.Skip<float, 2>();
-
-		auto param = MatbinFile::Param<float, 2>(paramName, key, values);
+		auto param = MatbinFile::Param<float, 2>(infoIndex);
 
 		this->float2Params.push_back(param);
 
@@ -89,10 +75,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Float3:
 	{
-		auto values = (float *) data.GetPos();
-		data.Skip<float, 3>();
-
-		auto param = MatbinFile::Param<float, 3>(paramName, key, values);
+		auto param = MatbinFile::Param<float, 3>(infoIndex);
 
 		this->float3Params.push_back(param);
 
@@ -100,10 +83,7 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Float4:
 	{
-		auto values = (float *) data.GetPos();
-		data.Skip<float, 4>();
-
-		auto param = MatbinFile::Param<float, 4>(paramName, key, values);
+		auto param = MatbinFile::Param<float, 4>(infoIndex);
 
 		this->float4Params.push_back(param);
 
@@ -111,22 +91,13 @@ void MatbinFile::ReadParam(BufferView& data) {
 	}
 	case ParamType::Float5:
 	{
-		auto values = (float *) data.GetPos();
-		data.Skip<float, 5>();
-
-		auto param = MatbinFile::Param<float, 5>(paramName, key, values);
+		auto param = MatbinFile::Param<float, 5>(infoIndex);
 
 		this->float5Params.push_back(param);
 
 		break;
 	}
 	}
-
-	if (data.GetPos() > this->dumbDataEnd) {
-		this->dumbDataEnd = data.GetPos();
-	}
-
-	data.SetOffset(currentOffset);
 }
 
 void MatbinFile::ReadSampler(BufferView& data) {
@@ -177,8 +148,6 @@ end(start + length) {
 
 	for (int i = 0; i < samplerCount; i++) {
 		ReadSampler(dataView);
-
-		// spdlog::info(std::format("Sampler: {}, texture path: {}", this->samplers.back().name, this->samplers.back().GetPath()));
 	}
 }
 
@@ -243,7 +212,7 @@ void MatbinFile::ApplyMod(const MaterialChange& change) {
 			continue;
 		}
 
-		spdlog::info(" Changed sampler {}", texChange.target);
+		spdlog::info(" Changed texture path {}", texChange.target);
 
 		sizeChange += (texChange.newPath.length() - param->path.length()) * 2;
 
@@ -257,75 +226,135 @@ void MatbinFile::ApplyMod(const MaterialChange& change) {
 
 		byte* newLocation = new byte[newLength];
 
-		memcpy(newLocation, this->start, this->dumbDataEnd - this->start);
-
-		TransferParams(newLocation, newLength);
-
-		this->start = newLocation;
-		this->end = newLocation + newLength;
-
-		this->relocated = true;
+		Relocate(newLocation, newLength);
 	}
 }
 
-void MatbinFile::TransferParams(byte* newStart, size_t newLength) {
-	for (auto& param : boolParams) {
-		int offset = (byte *) param.value - newStart;
+void MatbinFile::Relocate(byte* newStart, size_t newLength) {
+	BufferView dataView(newStart, newLength, false);
 
-		param.value = (bool*) (newStart + offset);
+	dataView.WriteASCII("MAB", true);
+	dataView.WriteInt32(2);
+
+	int shaderOffset = newLength - (this->shaderPath.size() + this->sourcePath.size() + 2) * 2;
+	dataView.WriteInt64(shaderOffset);
+	dataView.SetOffset(shaderOffset);
+	dataView.WriteUTF16(this->shaderPath);
+	dataView.SetOffset(16);
+
+	int sourceOffset = newLength - (this->sourcePath.size() + 1) * 2;
+	dataView.WriteInt64(sourceOffset);
+	dataView.SetOffset(sourceOffset);
+	dataView.WriteUTF16(this->sourcePath);
+	dataView.SetOffset(24);
+
+	dataView.WriteInt32(this->key);
+	dataView.WriteInt32(this->params.size());
+	dataView.WriteInt32(this->SamplerCount());
+
+	dataView.Write(std::array<byte, 0x14>({0}));
+
+	int baseOffset = dataView.GetOffset() + this->params.size() * ParamInfo::GetByteSize() + this->samplers.size() * TextureParam::GetByteSize();
+	int nameOffset = 0;
+
+	for (const auto& paramInfo : this->params) {
+		dataView.WriteInt64(baseOffset + nameOffset);
+		dataView.WriteInt64((uint64_t) ((byte *) paramInfo.valuePtr - this->start));
+		dataView.WriteInt32(paramInfo.key);
+		dataView.WriteInt32(paramInfo.type);
+
+		dataView.Write<0x10>({0});
+		
+		nameOffset += (paramInfo.name.size() * 2 + 2);
+
+		int additionalOffset = 0;
+		switch (paramInfo.type) {
+			case ParamType::Bool:
+				additionalOffset += 1;
+				break;
+			case ParamType::Float5:
+				additionalOffset += 4;
+			case ParamType::Float4:
+				additionalOffset += 4;
+			case ParamType::Float3:
+				additionalOffset += 4;
+			case ParamType::Int2:
+			case ParamType::Float2:
+				additionalOffset += 4;
+			case ParamType::Int:
+			case ParamType::Float:
+				additionalOffset += 4;
+				break;
+		}
+
+		// This type is actually a float5, with the last 2 values being useless
+		// We still have to account for their size though
+		if (paramInfo.type == ParamType::Float3) {
+			additionalOffset += 8;
+		}
+
+		nameOffset += additionalOffset;
 	}
-	for (auto& param : int1Params) {
-		int offset = (byte *) param.value - newStart;
 
-		param.value = (int*) (newStart + offset);
-	}
-	for (auto& param : int2Params) {
-		int offset = (byte *) param.value - newStart;
+	for (const auto& sampler : this->samplers) {
+		dataView.WriteInt64(baseOffset + nameOffset);
 
-		param.value = (int*) (newStart + offset);
-	}
-	for (auto& param : float1Params) {
-		int offset = (byte *) param.value - newStart;
+		nameOffset += sampler.name.size() * 2 + 2;
 
-		param.value = (float*) (newStart + offset);
-	}
-	for (auto& param : float2Params) {
-		int offset = (byte *) param.value - newStart;
+		dataView.WriteInt64(baseOffset + nameOffset);
 
-		param.value = (float*) (newStart + offset);
-	}
-	for (auto& param : float3Params) {
-		int offset = (byte *) param.value - newStart;
+		nameOffset += sampler.path.size() * 2 + 2;
 
-		param.value = (float*) (newStart + offset);
-	}
-	for (auto& param : float4Params) {
-		int offset = (byte *) param.value - newStart;
+		dataView.WriteInt32(sampler.key);
+		dataView.WriteInt32(sampler.unk[0]);
+		dataView.WriteInt32(sampler.unk[1]);
 
-		param.value = (float*) (newStart + offset);
-	}
-	for (auto& param : float5Params) {
-		int offset = (byte *) param.value - newStart;
-
-		param.value = (float*) (newStart + offset);
+		dataView.Write<0x14>({0});
 	}
 
-	// Samplers are a bit more complicated
-	int currentOffset = this->dumbDataEnd - this->start;
-	BufferView dataView(newStart, newLength);
+	for (auto& paramInfo : this->params) {
+		dataView.WriteUTF16(paramInfo.name);
+		
+		void* newValuePtr = dataView.GetPos();
 
-	for (auto& sampler : samplers) {
-		int offset = sampler.header - this->start;
-		sampler.header = newStart + offset;
+		if (paramInfo.type == ParamType::Bool) {
+			dataView.Write<1>({* (bool *)paramInfo.valuePtr});
+		}
+		else if (paramInfo.type & ParamType::Float) {
+			for (int i = 0; i < (paramInfo.type & 7) + 1; i++) {
+				dataView.WriteFloat(* ((float *) paramInfo.valuePtr + i));
+			}
 
-		// Dirty solution, I'll think of something more clever later
-		((uint64_t *) sampler.header)[1] = currentOffset;
+			if (paramInfo.type == ParamType::Float3) {
+				dataView.WriteFloat(1);
+				dataView.WriteFloat(1);
+			}
+		}
+		else if (paramInfo.type & ParamType::Int) {
 
-		dataView.SetOffset(currentOffset);
+			for (int i = 0; i < (paramInfo.type & 1) + 1; i++) {
+				dataView.WriteInt32(* ((int *) paramInfo.valuePtr + i));
+			}
+		}
 
+		paramInfo.valuePtr = newValuePtr;
+	}
+
+	for (const auto& sampler : this->samplers) {
 		dataView.WriteUTF16(sampler.name);
 		dataView.WriteUTF16(sampler.path);
 	}
+
+	this->start = newStart;
+	this->end = newStart + newLength;
+}
+
+int MatbinFile::ParamCount() {
+	return this->params.size();
+}
+
+int MatbinFile::SamplerCount() {
+	return this->samplers.size();
 }
 
 MatbinFile::operator bool() {
@@ -344,4 +373,11 @@ void MatbinFile::GetParam(Param<float, 2>*& param, const std::string& propertyNa
 void MatbinFile::GetParam(Param<float, 3>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float3Params) }
 void MatbinFile::GetParam(Param<float, 4>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float4Params) }
 void MatbinFile::GetParam(Param<float, 5>*& param, const std::string& propertyName) { SEARCH_PARAMS(this->float5Params) }
-void MatbinFile::GetSampler(TextureParam*& param, const std::string& propertyName) { SEARCH_PARAMS(this->samplers) }
+void MatbinFile::GetSampler(TextureParam*& param, const std::string& propertyName) {
+	for (auto& sampler : this->samplers) {
+		if (sampler.name == propertyName) {
+			param = &sampler;
+			break;
+		}
+	};
+}

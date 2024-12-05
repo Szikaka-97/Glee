@@ -20,14 +20,26 @@ concept ParamValue = (
 	(std::is_same<bool, T>::value && Length == 1)
 );
 
+
 class MatbinFile {
 private:
+	struct ParamInfo {
+		std::string name;
+		void* valuePtr;
+		int key;
+		int type;
+
+		static constexpr size_t GetByteSize() {
+			return (
+				8 + 8 + 4 + 4 + 0x10
+			);
+		}
+	};
+
 	template<typename T, size_t Length = 1>
 	requires ParamValue<T, Length>
 	struct Param {
-		const std::string name;
-		const int key;
-		T* value;
+		short infoIndex;
 
 		static constexpr byte ParamTypeMask() {
 			return {
@@ -39,10 +51,8 @@ private:
 			};
 		}
 
-		Param(const std::string& name, int key, T* value):
-		name(name),
-		key(key),
-		value(value) {}
+		Param(short infoIndex):
+		infoIndex(infoIndex) {}
 
 		byte GetMask() {
 			return Param<T, Length>::ParamTypeMask();
@@ -62,6 +72,12 @@ private:
 		path(path),
 		key(key),
 		unk({unk1, unk2}) { }
+
+		static constexpr size_t GetByteSize() {
+			return (
+				8 + 8 + 4 + 4 * 2 + 0x14
+			);
+		}
 	};
 
 	byte* start;
@@ -73,6 +89,7 @@ private:
 	unsigned int key;
 	bool relocated;
 
+	std::vector<ParamInfo> params;
 	std::vector<Param<bool>> boolParams;
 	std::vector<Param<int, 1>> int1Params;
 	std::vector<Param<int, 2>> int2Params;
@@ -88,7 +105,13 @@ private:
 	void ReadParam(BufferView& data);
 	void ReadSampler(BufferView& data);
 
-	void TransferParams(byte* newStart, size_t newLength);
+	void Relocate(byte* newStart, size_t newLength);
+
+	template<typename T, size_t Length>
+	requires ParamValue<T, Length>
+	T* GetParamValue(const Param<T, Length>* param) {
+		return (T *) this->params[param->infoIndex].valuePtr;
+	}
 
 	void GetParam(Param<bool, 1>*& param, const std::string& propertyName);
 	void GetParam(Param<int, 1>*& param, const std::string& propertyName);
@@ -125,7 +148,7 @@ public:
 
 		std::array<T, Length> result{0};
 
-		memcpy(result.data(), param->value, sizeof(T) * Length);
+		memcpy(result.data(), GetParamValue(param), sizeof(T) * Length);
 
 		return result;
 	}
@@ -141,7 +164,9 @@ public:
 			throw std::out_of_range(std::format("No param named {}", propertyName));
 		}
 
-		memcpy(const_cast<T *>(param->value), values.data(), sizeof(T) * Length);
+		memcpy(const_cast<T *>(GetParamValue(param)), values.data(), sizeof(T) * Length);
+
+		spdlog::info("Value: {} {} {}", GetParamValue(param)[0], GetParamValue(param)[1], GetParamValue(param)[2]);
 	}
 
 	void ApplyMod(const MaterialChange& change);
@@ -150,6 +175,9 @@ public:
 	inline byte* GetEnd() { return this->end; }
 
 	inline size_t GetLength() { return this->end - this->start; }
+
+	int ParamCount();
+	int SamplerCount();
 
 	inline bool NeedsRelocating() { return this->relocated; }
 

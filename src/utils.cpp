@@ -4,7 +4,7 @@ std::string StringUtils::Trim(const std::string& s) {
 	return s.substr(s.find_first_not_of(' '), s.find_last_not_of(' '));
 }
 
-std::filesystem::path PathUtils::StemWindows(const std::filesystem::path& p) {
+std::filesystem::path PathUtils::ChangeSlashes(const std::filesystem::path& p) {
 	std::string s = p.string();
 
 	for (char& c : s) {
@@ -13,5 +13,9 @@ std::filesystem::path PathUtils::StemWindows(const std::filesystem::path& p) {
 		}
 	}
 
-	return std::filesystem::path(s).stem();
+	return std::filesystem::path(s);
+}
+
+std::filesystem::path PathUtils::StemWindows(const std::filesystem::path& p) {
+	return PathUtils::ChangeSlashes(p).stem();
 }

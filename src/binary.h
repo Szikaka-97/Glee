@@ -6,6 +6,7 @@
 #include <cstring>
 #include <format>
 #include <stdint.h>
+#include <filesystem>
 
 typedef unsigned char byte;
 
@@ -119,6 +120,27 @@ public:
 
 	void Advance(int movement);
 
+	template<size_t Length>
+	void Write(std::array<byte, Length> data) {
+		if (current + Length > end) {
+			throw std::out_of_range(
+				std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, Length)
+			);
+		}
+
+		memcpy(current, data.data(), Length);
+
+		current += Length;
+	}
+
+	void WriteInt32(int value);
+
+	void WriteFloat(float value);
+
+	void WriteInt64(uint64_t value);
+
+	void WriteASCII(const std::string& value, bool nullTerminate = true);
+	
 	void WriteUTF16(const std::string& s);
 
 	byte* GetPos();
@@ -146,6 +168,8 @@ std::ostream& operator<< (std::ostream& o, const std::array<byte, Size>& a) {
 	return o;
 }
 
+void WriteUTF16ToStream(std::ostream& o, const std::string& s);
+
 template <size_t Size>
 std::array<byte, Size> ToBytes(const std::string& s) {
 	std::array<byte, Size> result = {0};
@@ -155,4 +179,37 @@ std::array<byte, Size> ToBytes(const std::string& s) {
 	return result;
 }
 
-std::array<byte, 4> ToBytes(int i, bool bigEndian = true);
+template<typename T>
+requires requires (T x) { std::is_fundamental<T>::value == true; }
+struct AsBytes {
+	static std::array<byte, sizeof(T)> Bytes(T val, bool bigEndian = true) {
+		std::array<byte, sizeof(T)> result = {0};
+
+		if (bigEndian) {
+			for (int i = 0; i < sizeof(T); i++) {
+				result[i] = (byte) (val >> ((sizeof(T) - 1 - i) * 8));
+			}
+		}
+		else {
+			for (int i = 0; i < sizeof(T); i++) {
+				result[i] = (byte) (val >> i * 8);
+			}
+		}
+
+		return result;
+	}
+};
+
+template<>
+struct AsBytes<bool> {
+	static std::array<byte, 1> Bytes(bool val, bool bigEndian = true) {
+		return { val };
+	}
+};
+
+template<typename T>
+std::array<byte, sizeof(T)> ToBytes(T val, bool bigEndian = true) {
+	return AsBytes<T>::Bytes(val, bigEndian);
+}
+
+void DumpToFile(const std::filesystem::path& p, const byte* start, const byte* end);
