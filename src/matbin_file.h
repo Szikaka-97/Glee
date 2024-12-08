@@ -179,7 +179,7 @@ public:
 	int ParamCount();
 	int SamplerCount();
 
-	inline bool NeedsRelocating() { return this->relocated; }
+	inline bool WasRelocated() { return this->relocated; }
 
 	inline bool IsValid() { return this->start != nullptr && this->end != nullptr; }
 	operator bool();

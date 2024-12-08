@@ -133,6 +133,22 @@ public:
 		current += Length;
 	}
 
+	void WriteData(const byte* dataStart, size_t dataLength) {
+		if (current + dataLength > end) {
+			throw std::out_of_range(
+				std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, dataLength)
+			);
+		}
+
+		memcpy(current, dataStart, dataLength);
+
+		current += dataLength;
+	}
+
+	void WriteByte(byte value);
+
+	void WriteBool(bool value);
+
 	void WriteInt32(int value);
 
 	void WriteFloat(float value);

@@ -139,10 +139,12 @@ public:
 	DCXFile* Pack(size_t compressedHeaderLength = 8);
 	static BNDFile* Unpack(const DCXFile* file);
 
+	const std::vector<const std::string*> GetAllMatbinPaths(bool fullPaths = false);
+
 	MatbinFile* GetMatbin(std::string name);
 
 	void ApplyMod(const MaterialMod& mod);
 
 	const byte* GetData() { return this->backingData; }
-	size_t GetSize() { return this->fileSize; }
+	size_t GetSize() { return this->fileSize + this->sizeDelta; }
 };

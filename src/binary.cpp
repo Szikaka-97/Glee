@@ -254,6 +254,14 @@ void BufferView::WriteInt32(int value) {
 	}
 }
 
+void BufferView::WriteByte(byte value) {
+	Write<1>({value});
+}
+
+void BufferView::WriteBool(bool value) {
+	Write<1>({value});
+}
+
 void BufferView::WriteFloat(float value) {
 	if (current + sizeof(int) > end) {
 		throw std::out_of_range(

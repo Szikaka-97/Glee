@@ -347,6 +347,8 @@ void MatbinFile::Relocate(byte* newStart, size_t newLength) {
 
 	this->start = newStart;
 	this->end = newStart + newLength;
+
+	this->relocated = true;
 }
 
 int MatbinFile::ParamCount() {

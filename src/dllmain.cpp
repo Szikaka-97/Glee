@@ -62,11 +62,10 @@ void InitLogger(fs::path path) {
 
 	auto mainLog = spdlog::basic_logger_mt("main", logFilePath.string());
 
-	spdlog::set_level(spdlog::level::trace);
-	spdlog::flush_on(spdlog::level::info);
-
 	spdlog::set_default_logger(mainLog);
 #endif
+	spdlog::set_level(spdlog::level::trace);
+	spdlog::flush_on(spdlog::level::trace);
 }
 
 void LoadXMLs() {
@@ -103,12 +102,12 @@ void LoadXMLs() {
 
 				pugi::xml_parse_result result = modDoc.load_file(filePath.c_str());
 				if (!result) {
-					spdlog::error(std::format("Failed to load the XML at path {}", filePath.string()));
+					spdlog::error("Failed to load the XML at path {}", filePath.string());
 
 					continue;
 				}
 				else {
-					spdlog::info(std::format("Loaded the XML at path {}", filePath.string()));
+					spdlog::info("Loaded the XML at path {}", filePath.string());
 				}
 
 				mod.AddMod(modDoc);
@@ -140,6 +139,9 @@ void LoadXMLs() {
 }
 
 void TestBNDWrite() {
+	// Test if the BND is generated correctly by comparing it with the original
+	// As of now I can't be bothered with replicating the quircks of the BND4 format exactly, so our criteria is "functionally equal"
+
 	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
 
 	spdlog::info("Testing BND writing");
@@ -180,6 +182,68 @@ void TestBNDWrite() {
 	const auto destBNDpath = pluginDir / "test" / "out.bnd";
 
 	bnd->Write(destBNDpath);
+
+// Test if the written thing is correct
+
+	size_t bndFileSize = fs::file_size(pluginDir / "test" / "out.bnd");
+	byte* newBNDData = new byte[bndFileSize];
+	std::ifstream newBndFileStream(pluginDir / "test" / "out.bnd");
+	newBndFileStream.read((char *) newBNDData, bndFileSize);
+	auto newBND = BNDFile::Parse(newBNDData, bndFileSize);
+
+	if (bnd->GetSize() != newBND->GetSize()) {
+		spdlog::error("BND: Sizes don't match (this is expected, though) {} != {}", bnd->GetSize(), newBND->GetSize());
+	}
+
+	int failCount = 0;
+	for (const std::string* path : bnd->GetAllMatbinPaths(false)) {
+		auto matbin = newBND->GetMatbin(*path);
+
+		if (!matbin) {
+			spdlog::error("BND: Can't find matbin {}", *path);
+
+			failCount++;
+
+			continue;
+		}
+
+		auto reference = bnd->GetMatbin(*path);
+
+		bool errored = false;
+
+		if (matbin->GetLength() != reference->GetLength()) {
+			spdlog::error("BND: Incorrect matbin {}, lengths don't match: {} != {}", *path, matbin->GetLength(), reference->GetLength());
+
+			errored = true;
+		}
+
+		if (matbin->ParamCount() != reference->ParamCount()) {
+			spdlog::error("BND: Incorrect matbin {}, param counts don't match: {} != {}", *path, matbin->ParamCount(), reference->ParamCount());
+
+			errored = true;
+		}
+		if (matbin->SamplerCount() != reference->SamplerCount()) {
+			spdlog::error("BND: Incorrect matbin {}, sampler counts don't match: {} != {}", *path, matbin->SamplerCount(), reference->SamplerCount());
+
+			errored = true;
+		}
+		
+		if (!errored) {
+			if (memcmp(matbin->GetStart(), reference->GetStart(), matbin->GetLength()) != 0) {
+				spdlog::error("BND: Incorrect matbin {}, parameter values don't match", *path);
+
+				errored = true;
+			}
+		}
+
+		failCount += errored;
+	}
+	if (failCount > 0) {
+		spdlog::error("Final error count: {}/{}", failCount, bnd->GetAllMatbinPaths().size());
+	}
+	else {
+		spdlog::info("All correct");
+	}
 }
 
 void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
@@ -189,8 +253,7 @@ void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 
 	spdlog::info("Initializing Glee");
 
-	// LoadXMLs();
-	TestBNDWrite();
+	LoadXMLs();
 }
 
 void Dispose() {

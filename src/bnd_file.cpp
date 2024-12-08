@@ -180,7 +180,7 @@ BNDFile* BNDFile::Parse(const byte* data, size_t dataLength) {
 
 		return result;
 	} catch (const std::runtime_error& e) {
-		spdlog::error(std::format("Runtime: {}", e.what()));
+		spdlog::error("Caught exception when parsing the BND file: {}", e.what());
 
 		return nullptr;
 	}
@@ -214,8 +214,6 @@ void BNDFile::Write(const std::filesystem::path& dest) {
 	size_t headersStartOffset = file.tellp();
 	size_t baseOffset = headersStartOffset + this->bindedFileInfos.size() * BindedFileInfo::GetSize();
 	size_t nameOffset = 0;
-
-	int* fileOffsetLocations = new int[this->bindedFileInfos.size()];
 
 	for (const auto& bindedFile : this->bindedFileInfos) {
 		file << ToBytes(DecodeFlags(0b01000000, this->header.reverseFlagBits));
@@ -275,7 +273,72 @@ BNDFile* BNDFile::Unpack(const DCXFile* file) {
 }
 
 void BNDFile::Relocate() {
+	byte* newLocation = new byte[this->GetSize()];
+	BufferView data(newLocation, this->GetSize(), true);
 
+	data.WriteASCII("BND4", false);
+	data.WriteBool(this->header.unk04);
+	data.WriteBool(this->header.unk05);
+	data.Write<3>({0});
+	data.WriteBool(this->header.bigEndian);
+	data.WriteBool(!this->header.reverseFlagBits);
+	data.WriteBool(0);
+	data.SetBigEndian(this->header.bigEndian);
+	data.WriteInt32(this->bindedFileInfos.size());
+	data.WriteInt64(0x40);
+	data.WriteInt64(this->header.version);
+	data.WriteInt64(BindedFileInfo::GetSize());
+	data.WriteInt64(0);
+	data.WriteBool(this->header.unicode);
+	data.WriteByte(DecodeFlags(this->header.format, this->header.reverseFlagBits));
+	data.WriteByte(4);
+	data.WriteByte(0);
+	data.WriteInt32(0);
+	data.WriteInt64(0);
+
+	size_t headersStartOffset = data.GetOffset();
+	size_t baseOffset = headersStartOffset + this->bindedFileInfos.size() * BindedFileInfo::GetSize();
+	size_t pathOffset = 0;
+
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		data.WriteByte(DecodeFlags(0b01000000, this->header.reverseFlagBits));
+		data.Write<3>({0});
+		data.WriteInt32(-1);
+		data.WriteInt64(bindedFile.GetFileSize());
+		data.WriteInt64(bindedFile.GetFileSize());
+		data.WriteInt64(-1); // File offset, we'll get to it later
+		data.WriteInt32(baseOffset + pathOffset); // Path offset
+
+		pathOffset += (bindedFile.path.size() + 1) * 2;
+	}
+
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		data.WriteUTF16(bindedFile.path);
+	}
+
+	int i = 0;
+	for (const auto& bindedFile : this->bindedFileInfos) {
+		auto currentPos = data.GetOffset();
+
+		data.SetOffset(headersStartOffset + (i * BindedFileInfo::GetSize()) + 24);
+
+		data.WriteInt64(currentPos);
+
+		data.SetOffset(currentPos);
+
+		if (bindedFile.loaded) {
+			data.WriteData(bindedFile.matbin->GetStart(), bindedFile.matbin->GetLength());
+		}
+		else {
+			data.WriteData(bindedFile.dataLocation.start, bindedFile.dataLocation.length);
+		}
+
+		i++;
+	}
+
+	delete[] this->backingData;
+
+	this->backingData = newLocation;
 }
 
 DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
@@ -288,9 +351,25 @@ DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 
 	byte* compressedData = new byte[expectedCompressedSize];
 
-	int actualCompressedSize = CompressData(this->backingData, this->fileSize, compressedData, expectedCompressedSize);
+	int actualCompressedSize = CompressData(this->backingData, this->fileSize + this->sizeDelta, compressedData, expectedCompressedSize);
 
-	return new DCXFile(actualCompressedSize, this->fileSize, compressedHeaderLength, compressedData);
+	return new DCXFile(actualCompressedSize, this->fileSize + this->sizeDelta, compressedHeaderLength, compressedData);
+}
+
+const std::vector<const std::string*> BNDFile::GetAllMatbinPaths(bool fullPaths) {
+	std::vector<const std::string*> pathList;
+	pathList.reserve(this->matbinFileMap.size());
+
+	for (const auto& pair : this->matbinFileMap) {
+		if (fullPaths) {
+			pathList.push_back(&pair.second->path);
+		}
+		else {
+			pathList.push_back(&pair.first);
+		}
+	}
+
+	return pathList;
 }
 
 MatbinFile* BNDFile::GetMatbin(std::string name) {
@@ -325,8 +404,8 @@ void BNDFile::ApplyMod(const MaterialMod& mod) {
 
 			matbin->ApplyMod(*change.second);
 
-			if (matbin->NeedsRelocating()) {
-				spdlog::info("Material {} needs relocating", change.first);
+			if (matbin->WasRelocated()) {
+				spdlog::info("Material {} was relocated", change.first);
 
 				this->sizeDelta += matbin->GetLength() - oldLength;
 			}
