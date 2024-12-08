@@ -5,6 +5,10 @@
 
 #include "spdlog/spdlog.h"
 
+constexpr inline float BufferView::ReverseEndianess(float value) {
+	return *reinterpret_cast<float *>(ReverseEndianess(*reinterpret_cast<uint32_t *>(&value)));
+}
+
 const std::string BufferView::ReadASCII(int length) {
 	if (current + length > end) {
 		throw std::out_of_range(
@@ -237,21 +241,13 @@ void BufferView::WriteInt32(int value) {
 		);
 	}
 
-	if (!bigEndian) {
-		memcpy(current, (byte *) &value, sizeof(int));
+	if (bigEndian) {
+		value = ReverseEndianess(value);
+	}
 
-		current += sizeof(int);
-	}
-	else {
-		std::array<byte, sizeof(int)> resultArray = {
-			(byte) value >> 24,
-			(byte) value >> 16,
-			(byte) value >> 8,
-			(byte) value
-		};
-		
-		Write(resultArray);
-	}
+	memcpy(current, (byte *) &value, sizeof(int));
+
+	current += sizeof(int);
 }
 
 void BufferView::WriteByte(byte value) {
@@ -263,29 +259,19 @@ void BufferView::WriteBool(bool value) {
 }
 
 void BufferView::WriteFloat(float value) {
-	if (current + sizeof(int) > end) {
+	if (current + sizeof(float) > end) {
 		throw std::out_of_range(
-			std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, sizeof(int))
+			std::format("Buffer overflow at Read offset= {} length= {}", this->current - this->start, sizeof(float))
 		);
 	}
 
-	uint32_t byteValue = *reinterpret_cast<uint32_t *>(&value);
-
-	if (!bigEndian) {
-		memcpy(current, (byte *) &value, sizeof(int));
-
-		current += sizeof(int);
+	if (bigEndian) {
+		value = ReverseEndianess(value);
 	}
-	else {
-		std::array<byte, sizeof(int)> resultArray = {
-			(byte) byteValue >> 24,
-			(byte) byteValue >> 16,
-			(byte) byteValue >> 8,
-			(byte) byteValue
-		};
-		
-		Write(resultArray);
-	}
+
+	memcpy(current, (byte *) &value, sizeof(float));
+
+	current += sizeof(int);
 }
 
 void BufferView::WriteInt64(uint64_t value) {
@@ -295,25 +281,13 @@ void BufferView::WriteInt64(uint64_t value) {
 		);
 	}
 
-	if (!bigEndian) {
-		memcpy(current, (byte *) &value, sizeof(uint64_t));
+	if (bigEndian) {
+		value = ReverseEndianess(value);
+	}
 
-		current += sizeof(uint64_t);
-	}
-	else {
-		std::array<byte, sizeof(uint64_t)> resultArray = {
-			(byte) value >> 56,
-			(byte) value >> 48,
-			(byte) value >> 40,
-			(byte) value >> 32,
-			(byte) value >> 24,
-			(byte) value >> 16,
-			(byte) value >> 8,
-			(byte) value
-		};
-		
-		Write(resultArray);
-	}
+	memcpy(current, (byte *) &value, sizeof(uint64_t));
+
+	current += sizeof(uint64_t);
 }
 
 void BufferView::WriteASCII(const std::string& value, bool nullTerminate) {

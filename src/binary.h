@@ -7,6 +7,8 @@
 #include <format>
 #include <stdint.h>
 #include <filesystem>
+#include <concepts>
+#include <algorithm>
 
 typedef unsigned char byte;
 
@@ -29,6 +31,27 @@ public:
 	end(start + length),
 	current(const_cast<byte *>(start)),
 	bigEndian(bigEndian) {}
+
+
+	template<typename T>
+	requires std::integral<T>
+	static constexpr inline T ReverseEndianess(T value) {
+		if (sizeof(T) == 1) {
+			return value;
+		}
+
+		T result = value;
+
+		byte* bytes = reinterpret_cast<byte *>(&result);
+
+		for (int i = 0; i < sizeof(T) / 2; i++) {
+			std::swap(bytes[i], bytes[sizeof(T) - i - 1]);
+		}
+
+		return result;
+	}
+
+	static constexpr inline float ReverseEndianess(float value);
 
 	template <size_t Size>
 	const std::array<byte, Size> Read() {
