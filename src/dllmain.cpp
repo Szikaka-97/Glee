@@ -19,12 +19,12 @@
 #include <thread>
 
 #include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
 #include "pugixml.hpp"
 
 #include "dcx_file.h"
 #include "matbin_file.h"
 #include "bnd_file.h"
+#include "logging.h"
 
 namespace fs = std::filesystem;
 
@@ -45,28 +45,6 @@ fs::path GetLibraryDir(HINSTANCE instanceID) {
 }
 
 fs::path pluginDir;
-
-void InitLogger(fs::path path) {
-#ifdef _WIN32
-	const auto t = std::time(0);
-	const auto now = std::localtime(&t);
-
-	std::string logFileName = "Glee-";
-	logFileName += std::to_string(now->tm_year - 100) + '-'
-		+ std::to_string(now->tm_mon + 1) + '-'
-		+ std::to_string(now->tm_mday) + '-'
-		+ std::to_string(now->tm_hour) + '-'
-		+ std::to_string(now->tm_min) + ".log";
-
-	fs::path logFilePath = path / "logs" / logFileName;
-
-	auto mainLog = spdlog::basic_logger_mt("main", logFilePath.string());
-
-	spdlog::set_default_logger(mainLog);
-#endif
-	spdlog::set_level(spdlog::level::trace);
-	spdlog::flush_on(spdlog::level::trace);
-}
 
 void LoadXMLs() {
 	const auto sourceDCXpath = pluginDir / "assets" / "allmaterial.matbinbnd.dcx";
@@ -128,7 +106,6 @@ void LoadXMLs() {
 	auto destMatFile = bnd->Pack();
 
 	const auto newDCXFilePath = pluginDir / "material" / "allmaterial.matbinbnd.dcx";
-	fs::create_directories(newDCXFilePath);
 
 	destMatFile->WriteFile(newDCXFilePath);
 
@@ -249,9 +226,9 @@ void TestBNDWrite() {
 void Start(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	pluginDir = GetLibraryDir(hinstDLL);
 
-	InitLogger(pluginDir);
+	Logging::InitLogger(pluginDir);
 
-	spdlog::info("Initializing Glee");
+	spdlog::info("Initialized Glee");
 
 	LoadXMLs();
 }

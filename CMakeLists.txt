@@ -43,6 +43,7 @@ if (WIN32)
     src/matbin_file.cpp
     src/compression.cpp
     src/utils.cpp
+    src/logging.cpp
     src/mat/material_mod.cpp
     src/mat/material_change.cpp
   )
@@ -55,6 +56,7 @@ else(WIN32)
     src/matbin_file.cpp
     src/compression.cpp
     src/utils.cpp
+    src/logging.cpp
     src/mat/material_mod.cpp
     src/mat/material_change.cpp
   )
