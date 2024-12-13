@@ -51,7 +51,7 @@ public:
 		return result;
 	}
 
-	static constexpr inline float ReverseEndianess(float value);
+	static inline float ReverseEndianess(float value);
 
 	template <size_t Size>
 	const std::array<byte, Size> Read() {

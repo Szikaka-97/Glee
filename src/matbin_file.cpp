@@ -105,7 +105,7 @@ void MatbinFile::ReadSampler(BufferView& data) {
 
 	std::string samplerName = data.ReadOffsetUTF16();
 	std::string path = data.ReadOffsetUTF16();
-	uint key = data.ReadInt32();
+	unsigned int key = data.ReadInt32();
 	auto unk = data.ReadFloatArray<2>();
 
 	for (int i = 0; i < 0x14; i++) {
@@ -123,7 +123,8 @@ void MatbinFile::ReadSampler(BufferView& data) {
 
 MatbinFile::MatbinFile(byte* start, size_t length):
 start(start),
-end(start + length) {
+end(start + length),
+relocated(false) {
 	BufferView dataView(start, end, false);
 
 	dataView.AssertASCII("MAB", 4, "MAB Magic Value");
@@ -194,9 +195,7 @@ void MatbinFile::ApplyMod(const MaterialChange& change) {
 		);
 
 		if (!result) {
-			// ERROR - possible typo or shader mismatch
-
-			spdlog::error("No change");
+			spdlog::error("Couldn't find param named {}, continuing to the next one", propChange.target);
 		}
 	}
 
@@ -207,7 +206,7 @@ void MatbinFile::ApplyMod(const MaterialChange& change) {
 		GetSampler(param, texChange.target);
 
 		if (!param) {
-			// ERROR - No param
+			spdlog::error("Couldn't find sampler named {}, continuing to the next one", texChange.target);
 
 			continue;
 		}

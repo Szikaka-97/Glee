@@ -5,7 +5,7 @@
 
 #include "spdlog/spdlog.h"
 
-constexpr inline float BufferView::ReverseEndianess(float value) {
+inline float BufferView::ReverseEndianess(float value) {
 	return *reinterpret_cast<float *>(ReverseEndianess(*reinterpret_cast<uint32_t *>(&value)));
 }
 

@@ -63,10 +63,10 @@ private:
 		byte* header;
 		const std::string name;
 		std::string path;
-		const uint key;
+		const unsigned int key;
 		const std::array<float, 2> unk;
 
-		TextureParam(byte* header, const std::string& name, std::string path, uint key, const float unk1, const float unk2):
+		TextureParam(byte* header, const std::string& name, std::string path, unsigned int key, const float unk1, const float unk2):
 		header(header),
 		name(name),
 		path(path),
@@ -166,7 +166,7 @@ public:
 
 		memcpy(const_cast<T *>(GetParamValue(param)), values.data(), sizeof(T) * Length);
 
-		spdlog::info("Value: {} {} {}", GetParamValue(param)[0], GetParamValue(param)[1], GetParamValue(param)[2]);
+		spdlog::info("  Value: {} {} {}", GetParamValue(param)[0], GetParamValue(param)[1], GetParamValue(param)[2]);
 	}
 
 	void ApplyMod(const MaterialChange& change);

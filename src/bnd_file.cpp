@@ -343,6 +343,8 @@ void BNDFile::Relocate() {
 
 DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 	if (this->sizeDelta != 0) {
+		spdlog::info("Relocating the BND in memory");
+
 		Relocate();
 	}
 
