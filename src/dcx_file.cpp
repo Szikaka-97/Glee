@@ -105,6 +105,8 @@ byte* DCXFile::Decompress(size_t& decompressedSize) const {
 void DCXFile::WriteFile(const fs::path& filePath) {
 	std::ofstream file(filePath, std::ios::binary);
 
+	const auto startTime = std::chrono::high_resolution_clock::now();
+
 	file << ToBytes<4>("DCX");
 	file << ToBytes(0x11000);
 	file << ToBytes(0x18);
@@ -128,4 +130,8 @@ void DCXFile::WriteFile(const fs::path& filePath) {
 	file.write((char *) this->compressedFileData, this->compressedSize);
 
 	file.close();
+
+	const auto endTime = std::chrono::high_resolution_clock::now();
+
+	spdlog::info("Wrote the file, took {}", std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime));
 }

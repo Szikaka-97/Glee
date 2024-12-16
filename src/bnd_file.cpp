@@ -348,11 +348,17 @@ DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 		Relocate();
 	}
 
+	const auto startTime = stdtime::high_resolution_clock::now();
+
 	const size_t expectedCompressedSize = 8e7;
 
 	byte* compressedData = new byte[expectedCompressedSize];
 
 	int actualCompressedSize = CompressData(this->backingData, this->fileSize + this->sizeDelta, compressedData, expectedCompressedSize);
+
+	const auto endTime = stdtime::high_resolution_clock::now();
+
+	spdlog::info("Compressed the BND, took {}", stdtime::duration_cast<stdtime::milliseconds>(endTime - startTime));
 
 	return new DCXFile(actualCompressedSize, this->fileSize + this->sizeDelta, compressedHeaderLength, compressedData);
 }
