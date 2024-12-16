@@ -112,8 +112,8 @@ void DCXFile::WriteFile(const fs::path& filePath) {
 	file << ToBytes(0x44);
 	file << ToBytes(0x4C);
 	file << ToBytes<4>("DCS");
-	file << ToBytes(this->uncompressedSize);
-	file << ToBytes(this->compressedSize);
+	file << ToBytes((uint32_t) this->uncompressedSize);
+	file << ToBytes((uint32_t) this->compressedSize);
 	file << ToBytes<4>("DCP");
 	file << ToBytes<4>("DFLT");
 	file << ToBytes(0x20);
@@ -123,7 +123,7 @@ void DCXFile::WriteFile(const fs::path& filePath) {
 	file << ToBytes(0);
 	file << ToBytes(0x00010100);
 	file << ToBytes<4>("DCA");
-	file << ToBytes(this->compressedHeaderLength);
+	file << ToBytes((uint32_t) this->compressedHeaderLength);
 
 	file.write((char *) this->compressedFileData, this->compressedSize);
 

@@ -206,7 +206,7 @@ void BNDFile::Write(const std::filesystem::path& dest) {
 	file << ToBytes((uint64_t) 0);
 	file << ToBytes(this->header.unicode);
 	file << ToBytes(DecodeFlags(this->header.format, this->header.reverseFlagBits));
-	file << ToBytes((byte) 4);
+	file << ToBytes((byte) 0);
 	file << ToBytes((byte) 0);
 	file << ToBytes((int) 0);
 	file << ToBytes((uint64_t) 0);
@@ -291,7 +291,7 @@ void BNDFile::Relocate() {
 	data.WriteInt64(0);
 	data.WriteBool(this->header.unicode);
 	data.WriteByte(DecodeFlags(this->header.format, this->header.reverseFlagBits));
-	data.WriteByte(4);
+	data.WriteByte(0);
 	data.WriteByte(0);
 	data.WriteInt32(0);
 	data.WriteInt64(0);
