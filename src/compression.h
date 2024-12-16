@@ -5,7 +5,7 @@
 #define ZLIB_WINAPI
 
 #include "binary.h"
-#include <zlib.h> // Yeah, it errors out, so what?
+#include "zlib.h"
 
 int GetMaxCompressedLen(int nLenSrc);
 

@@ -29,9 +29,20 @@ FetchContent_Declare(pugixml
   GIT_TAG         v1.14
 )
 
+set(ZLIB_COMPAT ON)
+set(ZLIB_ENABLE_TESTS OFF)
+set(ZLIBNG_ENABLE_TESTS OFF)
+set(WITH_SANITIZER OFF)
+set(WITH_GTEST OFF)
+FetchContent_Declare(zlib
+  GIT_REPOSITORY  https://github.com/zlib-ng/zlib-ng.git
+  GIT_TAG         2.2.2
+)
+
 FetchContent_MakeAvailable(
   spdlog
   pugixml
+  zlib
 )
 
 if (WIN32)
@@ -68,7 +79,6 @@ include_directories(src/mat)
 
 set_target_properties(EldenRingGlee PROPERTIES OUTPUT_NAME "GleeRecolorer")
 
-find_package(ZLIB REQUIRED)
-target_link_libraries(EldenRingGlee spdlog pugixml ZLIB::ZLIB)
+target_link_libraries(EldenRingGlee spdlog pugixml zlib)
 
 add_definitions(-DPROJECT_VERSION="${CMAKE_PROJECT_VERSION}")

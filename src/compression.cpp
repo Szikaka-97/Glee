@@ -1,6 +1,5 @@
 #include "compression.h"
 
-
 int GetMaxCompressedLen(int nLenSrc) {
 	int n16kBlocks = (nLenSrc + 16383) / 16384; // round up any fraction of a block
 	return nLenSrc + 6 + (n16kBlocks*5);
@@ -14,7 +13,7 @@ int CompressData(const byte* abSrc, int nLenSrc, byte* abDst, int nLenDst) {
 	zInfo.next_out = abDst;
 
 	int nErr, nRet = -1;
-	nErr = deflateInit(&zInfo, 0);
+	nErr = deflateInit(&zInfo, 1);
 	if (nErr == Z_OK) {
 		nErr= deflate(&zInfo, Z_FINISH);
 
