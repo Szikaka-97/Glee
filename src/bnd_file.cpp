@@ -348,8 +348,7 @@ DCXFile* BNDFile::Pack(size_t compressedHeaderLength) {
 		Relocate();
 	}
 
-	// It's usually enough for the file with ~500K to spare
-	const size_t expectedCompressedSize = 5e6;
+	const size_t expectedCompressedSize = 8e7;
 
 	byte* compressedData = new byte[expectedCompressedSize];
 

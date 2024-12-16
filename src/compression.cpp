@@ -14,7 +14,7 @@ int CompressData(const byte* abSrc, int nLenSrc, byte* abDst, int nLenDst) {
 	zInfo.next_out = abDst;
 
 	int nErr, nRet = -1;
-	nErr = deflateInit(&zInfo, 5);
+	nErr = deflateInit(&zInfo, 0);
 	if (nErr == Z_OK) {
 		nErr= deflate(&zInfo, Z_FINISH);
 
