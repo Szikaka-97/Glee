@@ -34,7 +34,7 @@ fs::path GetLibraryDir(HINSTANCE instanceID) {
 #ifdef _WIN32
     wchar_t path[MAX_PATH] = { 0 };
     GetModuleFileNameW(instanceID, path, MAX_PATH);
-    result =  path;
+    result = path;
 #else
     char path[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", path, PATH_MAX);
